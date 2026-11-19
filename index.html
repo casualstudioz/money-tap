@@ -21,7 +21,7 @@ button{cursor:pointer}
 button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--sv);outline-offset:2px}
 .app{max-width:520px;margin:0 auto;padding:max(14px,env(safe-area-inset-top)) 16px max(28px,env(safe-area-inset-bottom))}
 .top{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.brand{font-weight:800;font-size:20px;letter-spacing:-.3px;flex:1}
+.brand{font-weight:800;font-size:clamp(17px,5.2vw,20px);letter-spacing:-.3px;flex:1;white-space:nowrap}
 .seg{display:flex;background:var(--pan);border:1px solid var(--line);border-radius:14px;padding:3px;gap:2px}
 .seg button{white-space:nowrap;border:0;background:none;color:var(--mut);font-weight:600;font-size:15px;min-height:40px;padding:0 16px;border-radius:11px}
 .seg button.on{background:var(--pan2);color:var(--ink)}
@@ -95,6 +95,31 @@ h2 span{font-size:13px;font-weight:400;color:var(--mut);white-space:nowrap}
 .toast.show{transform:translate(-50%,0)}
 .toast button{border:0;background:var(--bg);color:#fff;border-radius:10px;min-height:36px;padding:0 12px;font-weight:600}
 .foot{text-align:center;font-size:13px;color:var(--mut);margin-top:14px}
+/* ---- log view fits one screen on every device ---- */
+body.logv{overflow:hidden;overscroll-behavior:none}
+body.logv .app{height:100vh;height:100dvh;display:flex;flex-direction:column;padding-top:max(10px,env(safe-area-inset-top));padding-bottom:max(10px,env(safe-area-inset-bottom))}
+body.logv .top{margin-bottom:clamp(6px,1.2vh,14px);flex:none}
+body.logv .status{flex:none;margin-bottom:clamp(6px,1vh,12px);padding:6px 10px;font-size:13px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#v-log:not([hidden]){flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(6px,1.2vh,12px)}
+#v-log .types{margin:0;flex:none}
+#v-log .types button{min-height:clamp(36px,5.2vh,46px)}
+#v-log .amount{padding:0;flex:none}
+#v-log .amount .n{font-size:clamp(38px,min(16vw,8.5vh),84px)}
+#v-log .amount .s{margin-top:clamp(2px,.6vh,8px);font-size:clamp(12px,1.6vh,13px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#v-log .cats{flex:none;flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;margin:0 -16px;padding:0 16px 2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+#v-log .cats::-webkit-scrollbar{display:none}
+#v-log .cats button{flex:none;min-height:clamp(34px,4.8vh,40px)}
+#v-log .note{flex:none;margin:0;min-height:clamp(38px,5.2vh,46px)}
+#v-log .pad{flex:1 1 auto;min-height:0;max-height:440px;grid-template-rows:repeat(4,minmax(0,1fr));gap:clamp(5px,.9vh,8px)}
+#v-log .pad button{min-height:0;font-size:clamp(20px,3.2vh,26px)}
+#v-log .go{flex:none;margin:0;min-height:clamp(46px,6.8vh,58px)}
+@media (orientation:landscape) and (max-height:560px){
+  body.logv .app{max-width:900px}
+  #v-log:not([hidden]){display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto auto auto minmax(0,1fr);column-gap:16px;row-gap:clamp(4px,1.4vh,10px)}
+  #v-log .types{grid-area:1/1}#v-log .amount{grid-area:2/1}#v-log .cats{grid-area:3/1;margin:0;padding:0 0 2px}#v-log .note{grid-area:4/1}#v-log .go{grid-area:5/1;align-self:end}
+  #v-log .pad{grid-area:1/2/6/3;max-height:none}
+  #v-log .amount .n{font-size:clamp(30px,11vh,60px)}
+}
 @media (prefers-reduced-motion:reduce){.toast,.go{transition:none;animation:none}}
 </style></head><body>
 <div class="app">
@@ -180,21 +205,22 @@ async function api(body){
   const j=await r.json();if(!j.ok)throw new Error(j.error||'refused');return j}
 function syncErr(e){const m=String(e&&e.message||'');return m==='bad key'?'The sheet key doesn\'t match. Check it in settings.':"Couldn't reach your Google Sheet. Entries are kept on this phone and will sync later."}
 function setSync(t){syncNote=t;const g=$('#g-state');if(g)g.textContent=t||(linked()?'Connected. Every entry is copied to your Google Sheet.':'Not connected. Entries are saved on this phone only.');renderLog()}
-async function pushAll(){await api({action:'replace',rows:S.entries.map(sheetRow)});S.dirty=false;saveLocal()}
+const SET_ID='app-settings';
+function settingsRow(){const t=S.settings;return['SETTINGS','','Settings',t.currency,+t.budget||0,String(+t.goal||0),SET_ID]}
+function readSettingsRow(rows){const r=rows.find(r=>String(r[6])===SET_ID||String(r[2]).trim()==='Settings');if(!r)return null;return{currency:String(r[3]),budget:String(r[4]).replace(/[^\d.]/g,''),goal:String(r[5]).replace(/[^\d.]/g,'')}}
+async function pushAll(){await api({action:'replace',rows:[settingsRow(),...S.entries.map(sheetRow)]});S.dirty=false;S.settingsDirty=false;saveLocal()}
 let oldScript=false,pulling=false,lastWrite=0;
-async function pushSettings(){await api({action:'settings',settings:{currency:S.settings.currency,budget:S.settings.budget,goal:S.settings.goal}});S.settingsDirty=false;saveLocal()}
+async function pushSettings(){await pushAll()}
 async function pull(){
   if(S.dirty)await pushAll();
-  if(S.settingsDirty&&!oldScript){try{await pushSettings()}catch(e){}}
+  if(S.settingsDirty&&!S.dirty){try{await pushAll()}catch(e){}}
   const started=Date.now();const j=await api(null);
   if(lastWrite>=started)return; // a newer local change happened meanwhile; next refresh picks it up
-  oldScript=!('settings' in j);
-  const t=j.settings;
+  const t=readSettingsRow(j.rows)||j.settings||null;
   if(t){if(t.currency!==undefined&&t.currency!=='')S.settings.currency=String(t.currency).slice(0,4);if(t.budget!==''&&+t.budget>=0)S.settings.budget=+t.budget;if(t.goal!==''&&+t.goal>=0)S.settings.goal=+t.goal}
-  else if(!oldScript){try{await pushSettings()}catch(e){}} // first device seeds the sheet
   S.entries=j.rows.map(fromRow).filter(Boolean).sort((a,b)=>a.ts-b.ts);saveLocal();
-  if(oldScript)setSync("Your Google script is an old version, so settings can't sync. Paste the new Code.gs and deploy a New version.");
-  else if(syncNote&&!/^(Loaded|Uploaded|Saved)/.test(syncNote))setSync('');
+  if(!t){try{await pushAll()}catch(e){}} // first device seeds the settings row
+  if(syncNote&&!/^(Loaded|Uploaded|Saved)/.test(syncNote))setSync('');
 }
 async function refresh(){
   if(!linked()||pulling||document.hidden||mode!=='local')return;
@@ -336,7 +362,7 @@ function drawCharts(force){
 new ResizeObserver(()=>{if(view==='report')drawCharts(false)}).observe($('#v-report'));
 
 /* ---------- views, settings ---------- */
-function show(v){view=v;$('#v-log').hidden=v!=='log';$('#v-report').hidden=v!=='report';document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);render()}
+function show(v){view=v;document.body.classList.toggle('logv',v==='log');$('#v-log').hidden=v!=='log';$('#v-report').hidden=v!=='report';document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);render()}
 function render(){renderLog();if(view==='report'&&mode!=='loading')renderReport()}
 $('#nav').onclick=e=>{const v=e.target.closest('button')?.dataset.v;if(v)show(v)};
 window.addEventListener('hashchange',()=>{const v=location.hash.slice(1);if(v==='log'||v==='report')show(v)});
@@ -346,7 +372,7 @@ $('#sheet').onclick=e=>{if(e.target.id==='sheet')$('#sheet').classList.remove('o
 $('#s-save').onclick=async()=>{const b=parseFloat($('#s-bud').value),g=parseFloat($('#s-goal').value);
   if(!(b>=0)||!(g>=0)){$('#s-msg').textContent='Budget and goal must be numbers.';return}
   try{await saveSettings({currency:$('#s-cur').value.trim().slice(0,4),budget:b,goal:g,scriptUrl:$('#s-url').value.trim(),key:$('#s-key').value.trim()});setSync('');
-    if(linked()){try{await pushSettings()}catch(e){const m=String(e&&e.message||'');S.settingsDirty=m!=='unknown action';saveLocal();$('#s-msg').textContent=m==='unknown action'?'Saved on this phone only. Your Google script is an old version: paste the new Code.gs and deploy a New version.':'Saved on this phone. It will sync to your other devices once the sheet can be reached.';return}
+    if(linked()){try{await pushSettings()}catch(e){S.settingsDirty=true;saveLocal();$('#s-msg').textContent='Saved on this phone. It will sync to your other devices once the sheet can be reached.';return}
       $('#s-msg').textContent='Saved. Your other devices update within about 15 seconds.';return}$('#s-msg').textContent='Saved.'}catch(e){$('#s-msg').textContent="Couldn't save settings."}};
 $('#s-import').onclick=async()=>{const lines=$('#s-imp').value.split(/\r?\n/);let n=0,bad=0;
   bulk=true;for(const l of lines){if(!l.trim())continue;const p=l.split('|');const m=(p[0]||'').trim().match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
