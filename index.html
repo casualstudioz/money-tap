@@ -157,6 +157,7 @@ body.logv .status{flex:none;margin-bottom:clamp(6px,1vh,12px);padding:6px 10px;f
   <textarea id="s-imp" placeholder="Paste lines from ledger.txt here"></textarea>
   <div class="row2"><button class="btn" id="s-import">Import</button><button class="btn" id="s-copy">Copy all entries</button></div>
   <div class="d" id="s-msg" style="margin-top:8px"></div>
+  <div class="d" id="s-ver" style="margin-top:14px"></div>
 </div></div>
 <div class="toast" id="toast"><span id="toast-t"></span><button id="toast-u">Undo</button></div>
 
@@ -178,6 +179,7 @@ const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',k
 const EMBED_URL='https://script.google.com/macros/s/AKfycbxoHHQaJ166ljV_DAT6ZBUi-WAANoZx4a16vE_3zAx2-N7UD9YIHS09Mi5bVamcRF0mQw/exec';
 const EMBED_KEY='Imanz2211@';
 /* ===================================================== */
+const APP_VERSION='2026.11.20-3';
 let syncNote='';
 let db=null,col=null,mode='loading',view='log',type='spend',cat='Food',amt='0',period='month',undoId=null,toastT=null;
 
@@ -209,7 +211,8 @@ const SET_ID='app-settings';
 function settingsRow(){const t=S.settings;return['SETTINGS','','Settings',t.currency,+t.budget||0,String(+t.goal||0),SET_ID]}
 function readSettingsRow(rows){const r=rows.find(r=>String(r[6])===SET_ID||String(r[2]).trim()==='Settings');if(!r)return null;return{currency:String(r[3]),budget:String(r[4]).replace(/[^\d.]/g,''),goal:String(r[5]).replace(/[^\d.]/g,'')}}
 async function pushAll(){await api({action:'replace',rows:[settingsRow(),...S.entries.map(sheetRow)]});S.dirty=false;S.settingsDirty=false;saveLocal()}
-let oldScript=false,pulling=false,lastWrite=0;
+let oldScript=false,pulling=false,lastWrite=0,lastSync=null;
+function checkUpdate(){fetch('version.json?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.v&&j.v!==APP_VERSION){let k='mt_rl_'+j.v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,'1')}catch(e){}location.reload()}}).catch(()=>{})}
 async function pushSettings(){await pushAll()}
 async function pull(){
   if(S.dirty)await pushAll();
@@ -218,7 +221,7 @@ async function pull(){
   if(lastWrite>=started)return; // a newer local change happened meanwhile; next refresh picks it up
   const t=readSettingsRow(j.rows)||j.settings||null;
   if(t){if(t.currency!==undefined&&t.currency!=='')S.settings.currency=String(t.currency).slice(0,4);if(t.budget!==''&&+t.budget>=0)S.settings.budget=+t.budget;if(t.goal!==''&&+t.goal>=0)S.settings.goal=+t.goal}
-  S.entries=j.rows.map(fromRow).filter(Boolean).sort((a,b)=>a.ts-b.ts);saveLocal();
+  lastSync=new Date();S.entries=j.rows.map(fromRow).filter(Boolean).sort((a,b)=>a.ts-b.ts);saveLocal();
   if(!t){try{await pushAll()}catch(e){}} // first device seeds the settings row
   if(syncNote&&!/^(Loaded|Uploaded|Saved)/.test(syncNote))setSync('');
 }
@@ -226,7 +229,7 @@ async function refresh(){
   if(!linked()||pulling||document.hidden||mode!=='local')return;
   pulling=true;try{await pull();render()}catch(e){}pulling=false;
 }
-setInterval(refresh,15000);
+setInterval(()=>{refresh();checkUpdate()},15000);setTimeout(checkUpdate,1500);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
 window.addEventListener('pageshow',e=>{if(e.persisted)refresh()});
 window.addEventListener('focus',refresh);
@@ -366,7 +369,7 @@ function show(v){view=v;document.body.classList.toggle('logv',v==='log');$('#v-l
 function render(){renderLog();if(view==='report'&&mode!=='loading')renderReport()}
 $('#nav').onclick=e=>{const v=e.target.closest('button')?.dataset.v;if(v)show(v)};
 window.addEventListener('hashchange',()=>{const v=location.hash.slice(1);if(v==='log'||v==='report')show(v)});
-$('#gear').onclick=()=>{const t=S.settings;$('#s-cur').value=t.currency;$('#s-bud').value=t.budget;$('#s-goal').value=t.goal;$('#s-url').value=t.scriptUrl||'';$('#s-key').value=t.key||'';setSync(syncNote);$('#s-msg').textContent='';$('#where').textContent=linked()?'synced with Google Sheet':'this phone only';$('#sheet').classList.add('open')};
+$('#gear').onclick=()=>{const t=S.settings;$('#s-cur').value=t.currency;$('#s-bud').value=t.budget;$('#s-goal').value=t.goal;$('#s-url').value=t.scriptUrl||'';$('#s-key').value=t.key||'';setSync(syncNote);$('#s-msg').textContent='';$('#s-ver').textContent='App version '+APP_VERSION+' · last synced with sheet: '+(lastSync?lastSync.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}):'not yet');$('#where').textContent=linked()?'synced with Google Sheet':'this phone only';$('#sheet').classList.add('open')};
 $('#s-close').onclick=()=>$('#sheet').classList.remove('open');
 $('#sheet').onclick=e=>{if(e.target.id==='sheet')$('#sheet').classList.remove('open')};
 $('#s-save').onclick=async()=>{const b=parseFloat($('#s-bud').value),g=parseFloat($('#s-goal').value);
