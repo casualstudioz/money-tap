@@ -176,30 +176,54 @@ function fromRow(r){const m=String(r[0]).match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:[ 
   return{id:String(r[6]||('s'+m.slice(1).join('')+Math.random().toString(36).slice(2,6))),t,cat:String(r[3]||'Other'),amt,note:String(r[5]||''),ts:new Date(+m[1],m[2]-1,+m[3],+(m[4]||12),+(m[5]||0)).getTime()}}
 async function api(body){
   const u=(S.settings.scriptUrl||'').trim(),k=S.settings.key||'';if(!u)throw new Error('nourl');
-  const r=body?await fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({key:k,...body})}):await fetch(u+(u.includes('?')?'&':'?')+'key='+encodeURIComponent(k));
+  const r=body?await fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({key:k,...body})}):await fetch(u+(u.includes('?')?'&':'?')+'key='+encodeURIComponent(k)+'&t='+Date.now());
   const j=await r.json();if(!j.ok)throw new Error(j.error||'refused');return j}
 function syncErr(e){const m=String(e&&e.message||'');return m==='bad key'?'The sheet key doesn\'t match. Check it in settings.':"Couldn't reach your Google Sheet. Entries are kept on this phone and will sync later."}
 function setSync(t){syncNote=t;const g=$('#g-state');if(g)g.textContent=t||(linked()?'Connected. Every entry is copied to your Google Sheet.':'Not connected. Entries are saved on this phone only.');renderLog()}
 async function pushAll(){await api({action:'replace',rows:S.entries.map(sheetRow)});S.dirty=false;saveLocal()}
-async function pull(){if(S.dirty)await pushAll();const j=await api(null);if(j.settings){const t=j.settings;if(t.currency!==undefined&&t.currency!=='')S.settings.currency=String(t.currency).slice(0,4);if(+t.budget>=0&&t.budget!=='')S.settings.budget=+t.budget;if(+t.goal>=0&&t.goal!=='')S.settings.goal=+t.goal}S.entries=j.rows.map(fromRow).filter(Boolean).sort((a,b)=>a.ts-b.ts);saveLocal()}
+let oldScript=false,pulling=false,lastWrite=0;
+async function pushSettings(){await api({action:'settings',settings:{currency:S.settings.currency,budget:S.settings.budget,goal:S.settings.goal}});S.settingsDirty=false;saveLocal()}
+async function pull(){
+  if(S.dirty)await pushAll();
+  if(S.settingsDirty&&!oldScript){try{await pushSettings()}catch(e){}}
+  const started=Date.now();const j=await api(null);
+  if(lastWrite>=started)return; // a newer local change happened meanwhile; next refresh picks it up
+  oldScript=!('settings' in j);
+  const t=j.settings;
+  if(t){if(t.currency!==undefined&&t.currency!=='')S.settings.currency=String(t.currency).slice(0,4);if(t.budget!==''&&+t.budget>=0)S.settings.budget=+t.budget;if(t.goal!==''&&+t.goal>=0)S.settings.goal=+t.goal}
+  else if(!oldScript){try{await pushSettings()}catch(e){}} // first device seeds the sheet
+  S.entries=j.rows.map(fromRow).filter(Boolean).sort((a,b)=>a.ts-b.ts);saveLocal();
+  if(oldScript)setSync("Your Google script is an old version, so settings can't sync. Paste the new Code.gs and deploy a New version.");
+  else if(syncNote&&!/^(Loaded|Uploaded|Saved)/.test(syncNote))setSync('');
+}
+async function refresh(){
+  if(!linked()||pulling||document.hidden||mode!=='local')return;
+  pulling=true;try{await pull();render()}catch(e){}pulling=false;
+}
+setInterval(refresh,15000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
+window.addEventListener('pageshow',e=>{if(e.persisted)refresh()});
+window.addEventListener('focus',refresh);
 async function init(){
   loadLocal();applyEmbed();mode='local';ready();
   if(!linked()){status('Saved on this phone only. Connect your Google Sheet in settings to back it up.');return}
   status('Syncing with your Google Sheet…');
-  try{await pull();status('');setSync('')}catch(e){status(syncErr(e))}
+  pulling=true;try{await pull();status('');if(!oldScript)setSync('')}catch(e){status(syncErr(e))}pulling=false;
   render();
 }
 function ready(){$('#go').disabled=false;render()}
 async function addEntry(e){
+  lastWrite=Date.now();
   const id='e'+e.ts+Math.random().toString(36).slice(2,6);S.entries.push({id,...e});S.entries.sort((a,b)=>a.ts-b.ts);saveLocal();render();
   if(linked()&&!bulk){try{if(S.dirty)await pushAll();else await api({action:'append',rows:[sheetRow({id,...e})]});if(syncNote)setSync('')}catch(err){S.dirty=true;saveLocal();setSync(syncErr(err))}}
   return id;
 }
 async function delEntry(id){
+  lastWrite=Date.now();
   S.entries=S.entries.filter(x=>x.id!==id);saveLocal();render();
   if(linked()){try{await pushAll();if(syncNote)setSync('')}catch(err){S.dirty=true;saveLocal();setSync(syncErr(err))}}
 }
-async function saveSettings(s){Object.assign(S.settings,s);saveLocal();render()}
+async function saveSettings(s){lastWrite=Date.now();Object.assign(S.settings,s);saveLocal();render()}
 
 /* ---------- log view ---------- */
 function renderLog(){
@@ -322,8 +346,8 @@ $('#sheet').onclick=e=>{if(e.target.id==='sheet')$('#sheet').classList.remove('o
 $('#s-save').onclick=async()=>{const b=parseFloat($('#s-bud').value),g=parseFloat($('#s-goal').value);
   if(!(b>=0)||!(g>=0)){$('#s-msg').textContent='Budget and goal must be numbers.';return}
   try{await saveSettings({currency:$('#s-cur').value.trim().slice(0,4),budget:b,goal:g,scriptUrl:$('#s-url').value.trim(),key:$('#s-key').value.trim()});setSync('');
-    if(linked()){try{await api({action:'settings',settings:{currency:S.settings.currency,budget:S.settings.budget,goal:S.settings.goal}})}catch(e){const m=String(e&&e.message||'');$('#s-msg').textContent=m==='unknown action'?'Saved on this phone. To sync settings to other devices, update Code.gs and redeploy it (see README).':'Saved on this phone, but couldn\'t reach the sheet to sync settings.';return}
-      $('#s-msg').textContent='Saved and synced to your Google Sheet.';return}$('#s-msg').textContent='Saved.'}catch(e){$('#s-msg').textContent="Couldn't save settings."}};
+    if(linked()){try{await pushSettings()}catch(e){const m=String(e&&e.message||'');S.settingsDirty=m!=='unknown action';saveLocal();$('#s-msg').textContent=m==='unknown action'?'Saved on this phone only. Your Google script is an old version: paste the new Code.gs and deploy a New version.':'Saved on this phone. It will sync to your other devices once the sheet can be reached.';return}
+      $('#s-msg').textContent='Saved. Your other devices update within about 15 seconds.';return}$('#s-msg').textContent='Saved.'}catch(e){$('#s-msg').textContent="Couldn't save settings."}};
 $('#s-import').onclick=async()=>{const lines=$('#s-imp').value.split(/\r?\n/);let n=0,bad=0;
   bulk=true;for(const l of lines){if(!l.trim())continue;const p=l.split('|');const m=(p[0]||'').trim().match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
     let a=(p[3]||'').trim().replace(/[^\d.,]/g,'');a=(/,\d{1,2}$/.test(a)&&!a.includes('.'))?a.replace(',','.'):a.replace(/,/g,'');const v=parseFloat(a);
