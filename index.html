@@ -120,13 +120,17 @@ body.logv .status{flex:none;margin-bottom:clamp(6px,1vh,12px);padding:6px 10px;f
   #v-log .pad{grid-area:1/2/6/3;max-height:none}
   #v-log .amount .n{font-size:clamp(30px,11vh,60px)}
 }
+#gear{position:relative}
+#sdot{position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:transparent;box-shadow:0 0 0 2px var(--pan)}
+#sdot[data-s=ok]{background:var(--sv)}#sdot[data-s=busy]{background:#fff;animation:pulse 1s infinite}#sdot[data-s=err]{background:var(--sp)}#sdot[data-s=off]{background:var(--mut)}
+@keyframes pulse{50%{opacity:.3}}
 @media (prefers-reduced-motion:reduce){.toast,.go{transition:none;animation:none}}
 </style></head><body>
 <div class="app">
   <div class="top">
     <div class="brand">Money Tap</div>
     <nav class="seg" id="nav"><button data-v="log">Log</button><button data-v="report">Report</button></nav>
-    <button class="icon" id="gear" aria-label="Settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    <button class="icon" id="gear" aria-label="Settings"><span id="sdot" data-s="idle" aria-hidden="true"></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </div>
   <div class="status" id="status">Loading…</div>
 
@@ -179,7 +183,7 @@ const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',k
 const EMBED_URL='https://script.google.com/macros/s/AKfycbxoHHQaJ166ljV_DAT6ZBUi-WAANoZx4a16vE_3zAx2-N7UD9YIHS09Mi5bVamcRF0mQw/exec';
 const EMBED_KEY='Imanz2211@';
 /* ===================================================== */
-const APP_VERSION='2026.11.20-3';
+const APP_VERSION='2026.11.20-4';
 let syncNote='';
 let db=null,col=null,mode='loading',view='log',type='spend',cat='Food',amt='0',period='month',undoId=null,toastT=null;
 
@@ -208,51 +212,80 @@ async function api(body){
 function syncErr(e){const m=String(e&&e.message||'');return m==='bad key'?'The sheet key doesn\'t match. Check it in settings.':"Couldn't reach your Google Sheet. Entries are kept on this phone and will sync later."}
 function setSync(t){syncNote=t;const g=$('#g-state');if(g)g.textContent=t||(linked()?'Connected. Every entry is copied to your Google Sheet.':'Not connected. Entries are saved on this phone only.');renderLog()}
 const SET_ID='app-settings';
-function settingsRow(){const t=S.settings;return['SETTINGS','','Settings',t.currency,+t.budget||0,String(+t.goal||0),SET_ID]}
-function readSettingsRow(rows){const r=rows.find(r=>String(r[6])===SET_ID||String(r[2]).trim()==='Settings');if(!r)return null;return{currency:String(r[3]),budget:String(r[4]).replace(/[^\d.]/g,''),goal:String(r[5]).replace(/[^\d.]/g,'')}}
-async function pushAll(){await api({action:'replace',rows:[settingsRow(),...S.entries.map(sheetRow)]});S.dirty=false;S.settingsDirty=false;saveLocal()}
-let oldScript=false,pulling=false,lastWrite=0,lastSync=null;
+/* Settings live in one row of the Ledger tab: SETTINGS | | Settings | currency | budget | goal | app-settings:<changed-at ms>
+   The newest change wins, so a device that missed an update can never write old values back. */
+function settingsRow(){const t=S.settings;return['SETTINGS','','Settings',t.currency,+t.budget||0,String(+t.goal||0),SET_ID+':'+(+t.updatedAt||0)]}
+function readSettingsRow(rows){const r=rows.find(r=>String(r[6]).startsWith(SET_ID)||String(r[2]).trim()==='Settings');if(!r)return null;
+  const num=v=>{const n=parseFloat(String(v).replace(/[^\d.]/g,''));return isFinite(n)?n:null};
+  return{currency:String(r[3]).trim(),budget:num(r[4]),goal:num(r[5]),updatedAt:parseInt(String(r[6]).split(':')[1])||0}}
+function pend(){if(!S.pend||typeof S.pend!=='object')S.pend={add:{},del:{}};S.pend.add=S.pend.add||{};S.pend.del=S.pend.del||{};return S.pend}
+let lastSync=null,syncState='idle',chain=Promise.resolve(),queued=0,panelEdited=false;
 function checkUpdate(){fetch('version.json?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.v&&j.v!==APP_VERSION){let k='mt_rl_'+j.v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,'1')}catch(e){}location.reload()}}).catch(()=>{})}
-async function pushSettings(){await pushAll()}
-async function pull(){
-  if(S.dirty)await pushAll();
-  if(S.settingsDirty&&!S.dirty){try{await pushAll()}catch(e){}}
-  const started=Date.now();const j=await api(null);
-  if(lastWrite>=started)return; // a newer local change happened meanwhile; next refresh picks it up
-  const t=readSettingsRow(j.rows)||j.settings||null;
-  if(t){if(t.currency!==undefined&&t.currency!=='')S.settings.currency=String(t.currency).slice(0,4);if(t.budget!==''&&+t.budget>=0)S.settings.budget=+t.budget;if(t.goal!==''&&+t.goal>=0)S.settings.goal=+t.goal}
-  lastSync=new Date();S.entries=j.rows.map(fromRow).filter(Boolean).sort((a,b)=>a.ts-b.ts);saveLocal();
-  if(!t){try{await pushAll()}catch(e){}} // first device seeds the settings row
-  if(syncNote&&!/^(Loaded|Uploaded|Saved)/.test(syncNote))setSync('');
+function setDot(st){syncState=st;const d=$('#sdot');if(!d)return;d.dataset.s=st;d.title={ok:'Synced'+(lastSync?' at '+lastSync.toLocaleTimeString():''),busy:'Syncing…',err:'Not synced: '+(syncNote||''),off:'Not connected to a sheet',idle:''}[st]||''}
+/* One sync = read the sheet, merge, write only what is needed. Calls are queued so two syncs never overlap. */
+function sync(o={}){if(!linked())return Promise.resolve(false);queued++;const run=chain.then(()=>doSync(o));chain=run.catch(()=>{}).finally(()=>{queued--});return run}
+async function doSync(o){
+  setDot('busy');
+  try{
+    const j=await api(null),p=pend(),rows=j.rows||[];
+    const sh=readSettingsRow(rows),lt=+S.settings.updatedAt||0;
+    let writeAll=!!o.overwrite||!sh;
+    if(sh){
+      if(sh.updatedAt>=lt){ // sheet is newer (or same): take its values
+        if(sh.currency)S.settings.currency=sh.currency.slice(0,4);
+        if(sh.budget!==null)S.settings.budget=sh.budget;
+        if(sh.goal!==null)S.settings.goal=sh.goal;
+        S.settings.updatedAt=sh.updatedAt;
+      } else writeAll=true; // this device has a newer change
+    }
+    const sheetE=rows.map(fromRow).filter(Boolean),ids=new Set(sheetE.map(x=>x.id));
+    for(const id in p.add)if(ids.has(id))delete p.add[id]; // already in the sheet
+    const adds=Object.values(p.add);
+    let merged=o.overwrite?S.entries.slice():sheetE.filter(x=>!p.del[x.id]).concat(adds);
+    merged.sort((a,b)=>a.ts-b.ts);
+    if(sheetE.some(x=>p.del[x.id]))writeAll=true;
+    if(writeAll)await api({action:'replace',rows:[settingsRow(),...merged.map(sheetRow)]});
+    else if(adds.length)await api({action:'append',rows:adds.map(sheetRow)});
+    p.add={};p.del={};
+    S.entries=merged;lastSync=new Date();saveLocal();
+    if(syncNote&&!/^(Loaded|Uploaded)/.test(syncNote))syncNote='';
+    setDot('ok');status('');return true;
+  }catch(e){syncNote=syncErr(e);setDot('err');return false}
+  finally{render();refreshPanel()}
 }
-async function refresh(){
-  if(!linked()||pulling||document.hidden||mode!=='local')return;
-  pulling=true;try{await pull();render()}catch(e){}pulling=false;
-}
+function refresh(){if(!linked()||queued>0||document.hidden||mode!=='local')return;sync()}
 setInterval(()=>{refresh();checkUpdate()},15000);setTimeout(checkUpdate,1500);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
 window.addEventListener('pageshow',e=>{if(e.persisted)refresh()});
 window.addEventListener('focus',refresh);
 async function init(){
-  loadLocal();applyEmbed();mode='local';ready();
-  if(!linked()){status('Saved on this phone only. Connect your Google Sheet in settings to back it up.');return}
+  loadLocal();applyEmbed();
+  if(S.dirty){for(const x of S.entries)pend().add[x.id]=x;S.dirty=false} // migrate older pending changes
+  mode='local';ready();
+  if(!linked()){setDot('off');status('Saved on this phone only. Connect your Google Sheet in settings to back it up.');return}
   status('Syncing with your Google Sheet…');
-  pulling=true;try{await pull();status('');if(!oldScript)setSync('')}catch(e){status(syncErr(e))}pulling=false;
-  render();
+  const ok=await sync();if(!ok)status(syncNote);
 }
 function ready(){$('#go').disabled=false;render()}
 async function addEntry(e){
-  lastWrite=Date.now();
-  const id='e'+e.ts+Math.random().toString(36).slice(2,6);S.entries.push({id,...e});S.entries.sort((a,b)=>a.ts-b.ts);saveLocal();render();
-  if(linked()&&!bulk){try{if(S.dirty)await pushAll();else await api({action:'append',rows:[sheetRow({id,...e})]});if(syncNote)setSync('')}catch(err){S.dirty=true;saveLocal();setSync(syncErr(err))}}
+  const id='e'+e.ts+Math.random().toString(36).slice(2,6),x={id,...e};
+  S.entries.push(x);S.entries.sort((a,b)=>a.ts-b.ts);pend().add[id]=x;saveLocal();render();
+  if(!bulk)sync();
   return id;
 }
 async function delEntry(id){
-  lastWrite=Date.now();
-  S.entries=S.entries.filter(x=>x.id!==id);saveLocal();render();
-  if(linked()){try{await pushAll();if(syncNote)setSync('')}catch(err){S.dirty=true;saveLocal();setSync(syncErr(err))}}
+  S.entries=S.entries.filter(x=>x.id!==id);const p=pend();if(p.add[id])delete p.add[id];else p.del[id]=1;saveLocal();render();
+  sync();
 }
-async function saveSettings(s){lastWrite=Date.now();Object.assign(S.settings,s);saveLocal();render()}
+async function saveSettings(s){Object.assign(S.settings,s);saveLocal();render()}
+function refreshPanel(){
+  if(!$('#sheet').classList.contains('open'))return;
+  if(!panelEdited){$('#s-cur').value=S.settings.currency;$('#s-bud').value=S.settings.budget;$('#s-goal').value=S.settings.goal}
+  const u=+S.settings.updatedAt;
+  $('#s-ver').textContent='App version '+APP_VERSION+' · last synced: '+(lastSync?lastSync.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}):'not yet')+(u?' · shared settings changed '+new Date(u).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'');
+  $('#where').textContent=linked()?(syncState==='err'?'not synced':'synced with Google Sheet'):'this phone only';
+  setSync(syncNote);
+}
 
 /* ---------- log view ---------- */
 function renderLog(){
@@ -369,23 +402,29 @@ function show(v){view=v;document.body.classList.toggle('logv',v==='log');$('#v-l
 function render(){renderLog();if(view==='report'&&mode!=='loading')renderReport()}
 $('#nav').onclick=e=>{const v=e.target.closest('button')?.dataset.v;if(v)show(v)};
 window.addEventListener('hashchange',()=>{const v=location.hash.slice(1);if(v==='log'||v==='report')show(v)});
-$('#gear').onclick=()=>{const t=S.settings;$('#s-cur').value=t.currency;$('#s-bud').value=t.budget;$('#s-goal').value=t.goal;$('#s-url').value=t.scriptUrl||'';$('#s-key').value=t.key||'';setSync(syncNote);$('#s-msg').textContent='';$('#s-ver').textContent='App version '+APP_VERSION+' · last synced with sheet: '+(lastSync?lastSync.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}):'not yet');$('#where').textContent=linked()?'synced with Google Sheet':'this phone only';$('#sheet').classList.add('open')};
+$('#gear').onclick=()=>{const t=S.settings;panelEdited=false;$('#s-url').value=t.scriptUrl||'';$('#s-key').value=t.key||'';$('#s-msg').textContent='';$('#sheet').classList.add('open');refreshPanel();if(linked())sync()};
+['#s-cur','#s-bud','#s-goal'].forEach(q=>$(q).addEventListener('input',()=>{panelEdited=true}));
 $('#s-close').onclick=()=>$('#sheet').classList.remove('open');
 $('#sheet').onclick=e=>{if(e.target.id==='sheet')$('#sheet').classList.remove('open')};
 $('#s-save').onclick=async()=>{const b=parseFloat($('#s-bud').value),g=parseFloat($('#s-goal').value);
   if(!(b>=0)||!(g>=0)){$('#s-msg').textContent='Budget and goal must be numbers.';return}
-  try{await saveSettings({currency:$('#s-cur').value.trim().slice(0,4),budget:b,goal:g,scriptUrl:$('#s-url').value.trim(),key:$('#s-key').value.trim()});setSync('');
-    if(linked()){try{await pushSettings()}catch(e){S.settingsDirty=true;saveLocal();$('#s-msg').textContent='Saved on this phone. It will sync to your other devices once the sheet can be reached.';return}
-      $('#s-msg').textContent='Saved. Your other devices update within about 15 seconds.';return}$('#s-msg').textContent='Saved.'}catch(e){$('#s-msg').textContent="Couldn't save settings."}};
+  const cur=$('#s-cur').value.trim().slice(0,4)||S.settings.currency,t=S.settings;
+  const changed=cur!==t.currency||b!==+t.budget||g!==+t.goal;
+  await saveSettings({currency:cur,budget:b,goal:g,scriptUrl:$('#s-url').value.trim(),key:$('#s-key').value.trim(),...(changed?{updatedAt:Date.now()}:{})});
+  panelEdited=false;
+  if(!linked()){$('#s-msg').textContent='Saved on this phone.';return}
+  $('#s-msg').textContent='Saving to your Google Sheet…';
+  const ok=await sync();
+  $('#s-msg').textContent=ok?'Saved. Your other devices update within about 15 seconds.':"Saved on this phone. It will sync once the sheet can be reached.";};
 $('#s-import').onclick=async()=>{const lines=$('#s-imp').value.split(/\r?\n/);let n=0,bad=0;
   bulk=true;for(const l of lines){if(!l.trim())continue;const p=l.split('|');const m=(p[0]||'').trim().match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
     let a=(p[3]||'').trim().replace(/[^\d.,]/g,'');a=(/,\d{1,2}$/.test(a)&&!a.includes('.'))?a.replace(',','.'):a.replace(/,/g,'');const v=parseFloat(a);
     const tw=(p[1]||'').trim().toLowerCase(),t=tw.startsWith('sp')?'spend':tw.startsWith('sa')?'save':tw.startsWith('in')?'inc':null;
     if(!m||!t||!(v>0)){bad++;continue}
     try{await addEntry({t,cat:(p[2]||'Other').trim()||'Other',amt:v,note:p.slice(4).join(' ').trim().slice(0,80),ts:new Date(+m[1],m[2]-1,+m[3],+(m[4]||12),+(m[5]||0)).getTime()});n++}catch(e){bad++}}
-  $('#s-msg').textContent=`Imported ${n} entr${n===1?'y':'ies'}${bad?`, skipped ${bad} line${bad===1?'':'s'}`:''}.`;bulk=false;if(n){$('#s-imp').value='';if(linked())try{await pushAll()}catch(e){S.dirty=true;saveLocal();setSync(syncErr(e))}}};
-$('#g-pull').onclick=async()=>{if(!linked()){setSync('Add the Apps Script URL and key, then tap Save settings.');return}const b=$('#g-pull');b.disabled=true;setSync('Loading…');try{await pull();setSync(`Loaded ${S.entries.length} entries from the sheet.`);render()}catch(e){setSync(syncErr(e))}b.disabled=false};
-$('#g-push').onclick=async()=>{if(!linked()){setSync('Add the Apps Script URL and key, then tap Save settings.');return}const b=$('#g-push');b.disabled=true;setSync('Uploading…');try{await pushAll();setSync(`Uploaded ${S.entries.length} entries. The sheet now matches this phone.`)}catch(e){setSync(syncErr(e))}b.disabled=false};
+  $('#s-msg').textContent=`Imported ${n} entr${n===1?'y':'ies'}${bad?`, skipped ${bad} line${bad===1?'':'s'}`:''}.`;bulk=false;if(n){$('#s-imp').value='';sync()}};
+$('#g-pull').onclick=async()=>{if(!linked()){setSync('Add the Apps Script URL and key, then tap Save settings.');return}const b=$('#g-pull');b.disabled=true;const ok=await sync();if(ok)setSync(`Loaded ${S.entries.length} entries and the shared settings from the sheet.`);b.disabled=false};
+$('#g-push').onclick=async()=>{if(!linked()){setSync('Add the Apps Script URL and key, then tap Save settings.');return}const b=$('#g-push');b.disabled=true;const ok=await sync({overwrite:true});if(ok)setSync(`Uploaded ${S.entries.length} entries. The sheet now matches this phone.`);b.disabled=false};
 $('#s-copy').onclick=async()=>{const txt=S.entries.map(x=>{const d=new Date(x.ts),z=n=>String(n).padStart(2,'0');return`${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}|${{spend:'Spend',save:'Save',inc:'Income'}[x.t]}|${x.cat}|${x.amt}|${x.note}`}).join('\n');
   try{await navigator.clipboard.writeText(txt);$('#s-msg').textContent=`Copied ${S.entries.length} entries.`}catch(e){$('#s-imp').value=txt;$('#s-msg').textContent='Copy was blocked, so the entries are in the box above to copy by hand.'}};
 
