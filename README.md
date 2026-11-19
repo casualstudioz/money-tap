@@ -24,6 +24,8 @@ A quick money tracker for iPhone. Double-tap the back of your phone, enter an am
 
 From then on, every entry is copied to the sheet. When you open the app, it loads the latest entries from the sheet, so all your devices stay in step.
 
+Your currency, monthly budget and savings goal are also saved in the sheet, on a tab called **App Settings**. Change them on one device and every other device picks them up the next time it opens the app.
+
 > If you edit `Code.gs` later, use **Deploy › Manage deployments › Edit › New version** so the URL stays the same.
 
 ## 3. iPhone Back Tap

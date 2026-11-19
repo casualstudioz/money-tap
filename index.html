@@ -150,9 +150,6 @@ const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',k
    that opens this page connects automatically, with nothing to type in settings.
    WARNING: if this file is in a PUBLIC GitHub repo, anyone can read these two
    values and then read or change your sheet. Use a private repo, or leave them blank. */
-//const EMBED_URL='';   // e.g. 'https://script.google.com/macros/s/AKfy.../exec'
-//const EMBED_KEY='';   // the same KEY you set in Code.gs
-
 const EMBED_URL='https://script.google.com/macros/s/AKfycbxoHHQaJ166ljV_DAT6ZBUi-WAANoZx4a16vE_3zAx2-N7UD9YIHS09Mi5bVamcRF0mQw/exec';
 const EMBED_KEY='Imanz2211@';
 /* ===================================================== */
@@ -184,7 +181,7 @@ async function api(body){
 function syncErr(e){const m=String(e&&e.message||'');return m==='bad key'?'The sheet key doesn\'t match. Check it in settings.':"Couldn't reach your Google Sheet. Entries are kept on this phone and will sync later."}
 function setSync(t){syncNote=t;const g=$('#g-state');if(g)g.textContent=t||(linked()?'Connected. Every entry is copied to your Google Sheet.':'Not connected. Entries are saved on this phone only.');renderLog()}
 async function pushAll(){await api({action:'replace',rows:S.entries.map(sheetRow)});S.dirty=false;saveLocal()}
-async function pull(){if(S.dirty)await pushAll();const j=await api(null);S.entries=j.rows.map(fromRow).filter(Boolean).sort((a,b)=>a.ts-b.ts);saveLocal()}
+async function pull(){if(S.dirty)await pushAll();const j=await api(null);if(j.settings){const t=j.settings;if(t.currency!==undefined&&t.currency!=='')S.settings.currency=String(t.currency).slice(0,4);if(+t.budget>=0&&t.budget!=='')S.settings.budget=+t.budget;if(+t.goal>=0&&t.goal!=='')S.settings.goal=+t.goal}S.entries=j.rows.map(fromRow).filter(Boolean).sort((a,b)=>a.ts-b.ts);saveLocal()}
 async function init(){
   loadLocal();applyEmbed();mode='local';ready();
   if(!linked()){status('Saved on this phone only. Connect your Google Sheet in settings to back it up.');return}
@@ -324,7 +321,9 @@ $('#s-close').onclick=()=>$('#sheet').classList.remove('open');
 $('#sheet').onclick=e=>{if(e.target.id==='sheet')$('#sheet').classList.remove('open')};
 $('#s-save').onclick=async()=>{const b=parseFloat($('#s-bud').value),g=parseFloat($('#s-goal').value);
   if(!(b>=0)||!(g>=0)){$('#s-msg').textContent='Budget and goal must be numbers.';return}
-  try{await saveSettings({currency:$('#s-cur').value.trim().slice(0,4),budget:b,goal:g,scriptUrl:$('#s-url').value.trim(),key:$('#s-key').value.trim()});setSync('');$('#s-msg').textContent='Saved.'}catch(e){$('#s-msg').textContent="Couldn't save settings."}};
+  try{await saveSettings({currency:$('#s-cur').value.trim().slice(0,4),budget:b,goal:g,scriptUrl:$('#s-url').value.trim(),key:$('#s-key').value.trim()});setSync('');
+    if(linked()){try{await api({action:'settings',settings:{currency:S.settings.currency,budget:S.settings.budget,goal:S.settings.goal}})}catch(e){const m=String(e&&e.message||'');$('#s-msg').textContent=m==='unknown action'?'Saved on this phone. To sync settings to other devices, update Code.gs and redeploy it (see README).':'Saved on this phone, but couldn\'t reach the sheet to sync settings.';return}
+      $('#s-msg').textContent='Saved and synced to your Google Sheet.';return}$('#s-msg').textContent='Saved.'}catch(e){$('#s-msg').textContent="Couldn't save settings."}};
 $('#s-import').onclick=async()=>{const lines=$('#s-imp').value.split(/\r?\n/);let n=0,bad=0;
   bulk=true;for(const l of lines){if(!l.trim())continue;const p=l.split('|');const m=(p[0]||'').trim().match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
     let a=(p[3]||'').trim().replace(/[^\d.,]/g,'');a=(/,\d{1,2}$/.test(a)&&!a.includes('.'))?a.replace(',','.'):a.replace(/,/g,'');const v=parseFloat(a);
