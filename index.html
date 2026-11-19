@@ -145,6 +145,14 @@ const PAL=['#ff5c8a','#8fd3ff','#ffffff','#ff9fbb','#4fa8e0','#c9ecff','#d23f6c'
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const WD=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',key:''},dirty:false};
+/* ===== OPTIONAL: built-in Google Sheet connection =====
+   Paste your Apps Script web app URL and KEY here so every phone or browser
+   that opens this page connects automatically, with nothing to type in settings.
+   WARNING: if this file is in a PUBLIC GitHub repo, anyone can read these two
+   values and then read or change your sheet. Use a private repo, or leave them blank. */
+const EMBED_URL='';   // e.g. 'https://script.google.com/macros/s/AKfy.../exec'
+const EMBED_KEY='';   // the same KEY you set in Code.gs
+/* ===================================================== */
 let syncNote='';
 let db=null,col=null,mode='loading',view='log',type='spend',cat='Food',amt='0',period='month',undoId=null,toastT=null;
 
@@ -158,6 +166,7 @@ const rows=()=>S.entries.map(x=>({...x,d:new Date(x.ts)}));
 /* ---------- storage: this phone + Google Sheet (Apps Script) ---------- */
 let bulk=false;
 function loadLocal(){try{const j=JSON.parse(localStorage.getItem('moneytap')||'{}');if(j.entries)S.entries=j.entries;if(j.settings)Object.assign(S.settings,j.settings);S.dirty=!!j.dirty}catch(e){}}
+function applyEmbed(){if(EMBED_URL&&!(S.settings.scriptUrl||'').trim()){S.settings.scriptUrl=EMBED_URL;S.settings.key=EMBED_KEY}}
 function saveLocal(){try{localStorage.setItem('moneytap',JSON.stringify(S))}catch(e){}}
 const z2=n=>String(n).padStart(2,'0');
 const linked=()=>!!(S.settings.scriptUrl||'').trim();
@@ -174,7 +183,7 @@ function setSync(t){syncNote=t;const g=$('#g-state');if(g)g.textContent=t||(link
 async function pushAll(){await api({action:'replace',rows:S.entries.map(sheetRow)});S.dirty=false;saveLocal()}
 async function pull(){if(S.dirty)await pushAll();const j=await api(null);S.entries=j.rows.map(fromRow).filter(Boolean).sort((a,b)=>a.ts-b.ts);saveLocal()}
 async function init(){
-  loadLocal();mode='local';ready();
+  loadLocal();applyEmbed();mode='local';ready();
   if(!linked()){status('Saved on this phone only. Connect your Google Sheet in settings to back it up.');return}
   status('Syncing with your Google Sheet…');
   try{await pull();status('');setSync('')}catch(e){status(syncErr(e))}

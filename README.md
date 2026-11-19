@@ -19,6 +19,9 @@ A quick money tracker for iPhone. Double-tap the back of your phone, enter an am
 5. Copy the **Web app URL**. It ends in `/exec`.
 6. In Money Tap, tap ⚙ › paste the URL and your key › **Save settings** › **Upload all to sheet** (or **Load from sheet** if the sheet already has your entries).
 
+**Optional: build the connection into the page.** Open `index.html` and find `EMBED_URL` and `EMBED_KEY` near the top of the script. Paste your URL and key between the quotes. Any phone or browser that opens the app then connects automatically, with nothing to type.
+⚠️ If the repo is **public**, anyone can see these values and read or change your sheet. Either make the repo **private** (GitHub Pages from a private repo needs a paid plan), or leave them blank and type them into settings instead.
+
 From then on, every entry is copied to the sheet. When you open the app, it loads the latest entries from the sheet, so all your devices stay in step.
 
 > If you edit `Code.gs` later, use **Deploy › Manage deployments › Edit › New version** so the URL stays the same.
