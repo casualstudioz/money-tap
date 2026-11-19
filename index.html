@@ -150,8 +150,11 @@ const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',k
    that opens this page connects automatically, with nothing to type in settings.
    WARNING: if this file is in a PUBLIC GitHub repo, anyone can read these two
    values and then read or change your sheet. Use a private repo, or leave them blank. */
-const EMBED_URL='';   // e.g. 'https://script.google.com/macros/s/AKfy.../exec'
-const EMBED_KEY='';   // the same KEY you set in Code.gs
+//const EMBED_URL='';   // e.g. 'https://script.google.com/macros/s/AKfy.../exec'
+//const EMBED_KEY='';   // the same KEY you set in Code.gs
+
+const EMBED_URL='https://script.google.com/macros/s/AKfycbxoHHQaJ166ljV_DAT6ZBUi-WAANoZx4a16vE_3zAx2-N7UD9YIHS09Mi5bVamcRF0mQw/exec';
+const EMBED_KEY='Imanz2211@';
 /* ===================================================== */
 let syncNote='';
 let db=null,col=null,mode='loading',view='log',type='spend',cat='Food',amt='0',period='month',undoId=null,toastT=null;
