@@ -129,6 +129,7 @@ body.logv .status{flex:none;margin-bottom:clamp(6px,1vh,12px);padding:6px 10px;f
 .ctabs{display:flex;gap:4px;background:var(--bg);border:1px solid var(--line);padding:3px;border-radius:12px;margin-bottom:14px}
 .ctabs button{flex:1;border:0;background:none;color:var(--mut);font-weight:600;font-size:14px;min-height:38px;border-radius:9px}
 .ctabs button.on[data-ct=spend]{background:var(--sp);color:#2a0612}.ctabs button.on[data-ct=save]{background:var(--sv);color:#06223a}.ctabs button.on[data-ct=inc]{background:#fff;color:var(--bg)}
+.ctabs button.on[data-et=spend]{background:var(--sp);color:#2a0612}.ctabs button.on[data-et=save]{background:var(--sv);color:#06223a}.ctabs button.on[data-et=inc]{background:#fff;color:var(--bg)}
 .donutwrap{display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr);gap:16px;align-items:center}
 @media(max-width:420px){.donutwrap{grid-template-columns:1fr}.donutwrap svg{max-width:200px;margin:0 auto;display:block}}
 .donutwrap svg{width:100%;height:auto}
@@ -148,6 +149,9 @@ body.logv .status{flex:none;margin-bottom:clamp(6px,1vh,12px);padding:6px 10px;f
 .fleg b{display:block;font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
 .fleg .sw{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:1px}
 .mleg{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin-top:8px}.mleg span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:var(--c)}
+#esheet .cats button{min-height:36px}
+#pw-form input{width:100%;min-height:46px;border-radius:12px;border:1px solid var(--line);background:var(--bg);padding:10px 12px;font-size:16px}
+#e-ts{color-scheme:dark}
 @media (prefers-reduced-motion:reduce){.toast,.go{transition:none;animation:none}}
 </style></head><body>
 <div class="app">
@@ -181,11 +185,39 @@ body.logv .status{flex:none;margin-bottom:clamp(6px,1vh,12px);padding:6px 10px;f
   <label for="s-url">Apps Script web app URL</label><input id="s-url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec">
   <label for="s-key">Sheet key (the KEY you set in the script)</label><input id="s-key" autocomplete="off">
   <div class="row2"><button class="btn" id="g-pull">Load from sheet</button><button class="btn" id="g-push">Upload all to sheet</button></div>
+  <label>Edit password</label>
+  <div class="d" id="pw-state"></div>
+  <input type="password" id="pw-cur" placeholder="Current password" autocomplete="current-password" style="margin-top:8px">
+  <input type="password" id="pw-new" placeholder="New password (at least 4 characters)" autocomplete="new-password" style="margin-top:8px">
+  <div class="row2"><button class="btn" id="pw-set">Set password</button><button class="btn" id="pw-clear">Remove password</button></div>
+  <div class="d" id="pw-msg" style="margin-top:6px"></div>
   <label for="s-imp">Import entries (one per line: 2026-11-17 08:30|Spend|Food|12.50|Lunch)</label>
   <textarea id="s-imp" placeholder="Paste lines from ledger.txt here"></textarea>
   <div class="row2"><button class="btn" id="s-import">Import</button><button class="btn" id="s-copy">Copy all entries</button></div>
   <div class="d" id="s-msg" style="margin-top:8px"></div>
   <div class="d" id="s-ver" style="margin-top:14px"></div>
+</div></div>
+<div class="sheet" id="pwsheet"><div style="max-width:420px">
+  <h2 id="pw-title">Enter password</h2>
+  <div class="d" id="pw-sub">Editing entries is password protected.</div>
+  <form id="pw-form" autocomplete="off">
+    <input type="password" id="pw-in" placeholder="Password" autocomplete="current-password" style="margin-top:12px">
+    <input type="password" id="pw-in2" placeholder="Repeat password" autocomplete="new-password" style="margin-top:8px" hidden>
+    <div class="row2"><button class="btn pri" type="submit" id="pw-ok">Unlock</button><button class="btn" type="button" id="pw-cancel">Cancel</button></div>
+  </form>
+  <div class="d" id="pw-err" style="margin-top:8px;color:var(--sp)"></div>
+  <div class="d" style="margin-top:12px">Forgot it? In your Google Sheet, Ledger tab, row 2, change the last cell to <b>app-settings</b>. That removes the password on every device.</div>
+</div></div>
+<div class="sheet" id="esheet"><div>
+  <h2>Edit entry <span id="e-when"></span></h2>
+  <div class="ctabs" id="e-type"><button data-et="spend">Spend</button><button data-et="save">Save</button><button data-et="inc">Income</button></div>
+  <label for="e-amt">Amount</label><input id="e-amt" inputmode="decimal" autocomplete="off">
+  <label for="e-cat">Category</label><input id="e-cat" maxlength="30" autocomplete="off">
+  <div class="cats" id="e-cats" style="justify-content:flex-start;margin:8px 0 0"></div>
+  <label for="e-note">Note</label><input id="e-note" maxlength="80" autocomplete="off">
+  <label for="e-ts">Date and time</label><input id="e-ts" type="datetime-local">
+  <div class="row2"><button class="btn pri" id="e-save">Save changes</button><button class="btn" id="e-del" style="color:var(--sp)">Delete</button><button class="btn" id="e-cancel">Cancel</button></div>
+  <div class="d" id="e-msg" style="margin-top:8px"></div>
 </div></div>
 <div class="toast" id="toast"><span id="toast-t"></span><button id="toast-u">Undo</button></div>
 
@@ -198,7 +230,7 @@ const COL={spend:'#ff5c8a',save:'#8fd3ff',inc:'#ffffff'};
 const PAL=['#ff5c8a','#8fd3ff','#ffffff','#ff9fbb','#4fa8e0','#c9ecff','#d23f6c','#2f7fb8','#a9b8c9'];
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const WD=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',key:''},dirty:false};
+const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',key:'',pw:''},dirty:false};
 /* ===== OPTIONAL: built-in Google Sheet connection =====
    Paste your Apps Script web app URL and KEY here so every phone or browser
    that opens this page connects automatically, with nothing to type in settings.
@@ -207,7 +239,7 @@ const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',k
 const EMBED_URL='https://script.google.com/macros/s/AKfycbxoHHQaJ166ljV_DAT6ZBUi-WAANoZx4a16vE_3zAx2-N7UD9YIHS09Mi5bVamcRF0mQw/exec';
 const EMBED_KEY='Imanz2211@';
 /* ===================================================== */
-const APP_VERSION='2026.11.22-1';
+const APP_VERSION='2026.11.22-3';
 let syncNote='';
 let db=null,col=null,mode='loading',view='log',type='spend',cat='Food',amt='0',period='month',undoId=null,toastT=null;
 
@@ -238,11 +270,11 @@ function setSync(t){syncNote=t;const g=$('#g-state');if(g)g.textContent=t||(link
 const SET_ID='app-settings';
 /* Settings live in one row of the Ledger tab: SETTINGS | | Settings | currency | budget | goal | app-settings:<changed-at ms>
    The newest change wins, so a device that missed an update can never write old values back. */
-function settingsRow(){const t=S.settings;return['SETTINGS','','Settings',t.currency,+t.budget||0,String(+t.goal||0),SET_ID+':'+(+t.updatedAt||0)]}
+function settingsRow(){const t=S.settings;return['SETTINGS','','Settings',t.currency,+t.budget||0,String(+t.goal||0),SET_ID+':'+(+t.updatedAt||0)+':'+(t.pw||'')+':'+(+t.pwAt||0)]}
 function readSettingsRow(rows){const r=rows.find(r=>String(r[6]).startsWith(SET_ID)||String(r[2]).trim()==='Settings');if(!r)return null;
   const num=v=>{const n=parseFloat(String(v).replace(/[^\d.]/g,''));return isFinite(n)?n:null};
-  return{currency:String(r[3]).trim(),budget:num(r[4]),goal:num(r[5]),updatedAt:parseInt(String(r[6]).split(':')[1])||0}}
-function pend(){if(!S.pend||typeof S.pend!=='object')S.pend={add:{},del:{}};S.pend.add=S.pend.add||{};S.pend.del=S.pend.del||{};return S.pend}
+  return{currency:String(r[3]).trim(),budget:num(r[4]),goal:num(r[5]),updatedAt:parseInt(String(r[6]).split(':')[1])||0,pw:String(r[6]).split(':')[2]||'',pwAt:parseInt(String(r[6]).split(':')[3])||0,pwReset:String(r[6]).trim().split(':').length<3}}
+function pend(){if(!S.pend||typeof S.pend!=='object')S.pend={add:{},del:{}};S.pend.add=S.pend.add||{};S.pend.del=S.pend.del||{};S.pend.edit=S.pend.edit||{};return S.pend}
 let lastSync=null,syncState='idle',chain=Promise.resolve(),queued=0,panelEdited=false;
 function checkUpdate(){fetch('version.json?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.v&&j.v!==APP_VERSION){let k='mt_rl_'+j.v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,'1')}catch(e){}location.reload()}}).catch(()=>{})}
 function setDot(st){syncState=st;const d=$('#sdot');if(!d)return;d.dataset.s=st;d.title={ok:'Synced'+(lastSync?' at '+lastSync.toLocaleTimeString():''),busy:'Syncing…',err:'Not synced: '+(syncNote||''),off:'Not connected to a sheet',idle:''}[st]||''}
@@ -261,16 +293,19 @@ async function doSync(o){
         if(sh.goal!==null)S.settings.goal=sh.goal;
         S.settings.updatedAt=sh.updatedAt;
       } else writeAll=true; // this device has a newer change
+      // the password has its own timestamp, so changing it never rewrites other settings
+      if(sh.pwReset){S.settings.pw='';S.settings.pwAt=Date.now();writeAll=true} // cell reset in the sheet = password removed
+      else if(sh.pwAt>=(+S.settings.pwAt||0)){S.settings.pw=sh.pw;S.settings.pwAt=sh.pwAt}else writeAll=true;
     }
     const sheetE=rows.map(fromRow).filter(Boolean),ids=new Set(sheetE.map(x=>x.id));
     for(const id in p.add)if(ids.has(id))delete p.add[id]; // already in the sheet
     const adds=Object.values(p.add);
-    let merged=o.overwrite?S.entries.slice():sheetE.filter(x=>!p.del[x.id]).concat(adds);
+    let merged=o.overwrite?S.entries.slice():sheetE.filter(x=>!p.del[x.id]).map(x=>p.edit[x.id]||x).concat(adds);
     merged.sort((a,b)=>a.ts-b.ts);
-    if(sheetE.some(x=>p.del[x.id]))writeAll=true;
+    if(sheetE.some(x=>p.del[x.id]||p.edit[x.id]))writeAll=true;
     if(writeAll)await api({action:'replace',rows:[settingsRow(),...merged.map(sheetRow)]});
     else if(adds.length)await api({action:'append',rows:adds.map(sheetRow)});
-    p.add={};p.del={};
+    p.add={};p.del={};p.edit={};
     S.entries=merged;lastSync=new Date();saveLocal();
     if(syncNote&&!/^(Loaded|Uploaded)/.test(syncNote))syncNote='';
     setDot('ok');status('');return true;
@@ -308,7 +343,7 @@ function refreshPanel(){
   const u=+S.settings.updatedAt;
   $('#s-ver').textContent='App version '+APP_VERSION+' · last synced: '+(lastSync?lastSync.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}):'not yet')+(u?' · shared settings changed '+new Date(u).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'');
   $('#where').textContent=linked()?(syncState==='err'?'not synced':'synced with Google Sheet'):'this phone only';
-  setSync(syncNote);
+  renderPwPanel();setSync(syncNote);
 }
 
 /* ---------- log view ---------- */
@@ -416,7 +451,7 @@ function renderReport(){
   if(inc)I.push([rate>=.2?'':'bad',rate>=.2?`Your savings rate of ${(rate*100).toFixed(0)}% beats the common 20% guideline.`:`Savings rate is ${(rate*100).toFixed(0)}%. Saving ${fmt(Math.ceil(inc*.2-sv))} more would reach 20%.`]);
   if(proj>B)I.push(['bad',`To finish on budget, keep spending under ${fmt(Math.round(safe*100)/100)} a day.`]);
   h+=`<div class="card"><h2>Insights</h2><ul class="ins">${I.map(([c,t])=>`<li class="${c}">${t}</li>`).join('')}</ul></div>`;
-  h+=`<div class="card"><h2>Entries <span>${R.length} in period</span></h2><div class="tx">${R.slice(-25).reverse().map(x=>`<div><span class="m">${esc(x.cat)}<small>${x.d.getDate()} ${MON[x.d.getMonth()]} ${String(x.d.getHours()).padStart(2,'0')}:${String(x.d.getMinutes()).padStart(2,'0')}${x.note?' · '+esc(x.note):''}</small></span><b style="color:${COL[x.t]}">${x.t==='spend'?'−':'+'}${fmt(x.amt)}</b><button class="del" data-id="${esc(x.id)}" aria-label="Delete entry">✕</button></div>`).join('')}</div>${R.length>25?'<div class="d">Showing the latest 25.</div>':''}</div>
+  h+=`<div class="card"><h2>Entries <span>${R.length} in period</span></h2><div class="tx">${R.slice(-25).reverse().map(x=>`<div data-edit="${esc(x.id)}" style="cursor:pointer"><span class="m">${esc(x.cat)}<small>${x.d.getDate()} ${MON[x.d.getMonth()]} ${String(x.d.getHours()).padStart(2,'0')}:${String(x.d.getMinutes()).padStart(2,'0')}${x.note?' · '+esc(x.note):''}</small></span><b style="color:${COL[x.t]}">${x.t==='spend'?'−':'+'}${fmt(x.amt)}</b><button class="del" data-edit="${esc(x.id)}" aria-label="Edit entry">${unlocked()?'Edit':'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'}</button></div>`).join('')}</div><div class="d" style="margin-top:6px">${R.length>25?'Showing the latest 25. ':''}Tap an entry to edit or delete it${S.settings.pw?' (password protected)':''}.</div></div>
   <div class="foot">${ALL.length} entries · ${linked()?'synced with your Google Sheet':'saved on this phone'}</div>`;
   el.innerHTML=h;drawCharts(true);
 }
@@ -424,9 +459,7 @@ $('#v-report').onclick=async e=>{
   const p=e.target.closest('[data-p]');if(p){period=p.dataset.p;catSel=null;renderReport();return}
   const ct=e.target.closest('[data-ct]');if(ct){catType=ct.dataset.ct;catSel=null;renderReport();return}
   const cs=e.target.closest('[data-cat]');if(cs){catSel=catSel===cs.dataset.cat?null:cs.dataset.cat;renderReport();return}
-  const d=e.target.closest('.del');if(!d)return;
-  if(!d.classList.contains('arm')){d.classList.add('arm');d.textContent='Delete';setTimeout(()=>{d.classList.remove('arm');d.textContent='✕'},3000);return}
-  d.disabled=true;try{await delEntry(d.dataset.id)}catch(err){d.disabled=false}
+  const ed=e.target.closest('[data-edit]');if(ed)requestEdit(ed.dataset.edit);
 };
 let lastW=0;
 function drawCharts(force){
@@ -452,12 +485,71 @@ function drawCharts(force){
 }
 new ResizeObserver(()=>{if(view==='report')drawCharts(false)}).observe($('#v-report'));
 
+/* ---------- password-protected editing ---------- */
+let unlockedUntil=0,editId=null,editType='spend',pwThen=null;
+const unlocked=()=>!S.settings.pw||Date.now()<unlockedUntil;
+async function hashPw(pw,salt){const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+'|'+pw));return Array.from(new Uint8Array(d),b=>b.toString(16).padStart(2,'0')).join('')}
+async function makePw(pw){const salt=Array.from(crypto.getRandomValues(new Uint8Array(8)),b=>b.toString(16).padStart(2,'0')).join('');return salt+'$'+await hashPw(pw,salt)}
+async function checkPw(pw){const v=S.settings.pw||'';if(!v)return true;const [salt,h]=v.split('$');return !!h&&await hashPw(pw,salt)===h}
+function openPw(mode,then){pwThen=then;const create=mode==='create';
+  $('#pw-title').textContent=create?'Create an edit password':'Enter password';
+  $('#pw-sub').textContent=create?'Set a password so only you can change or delete entries. It works on all your devices.':'Editing entries is password protected.';
+  $('#pw-in2').hidden=!create;$('#pw-ok').textContent=create?'Set password':'Unlock';$('#pw-form').dataset.mode=mode;
+  $('#pw-in').value='';$('#pw-in2').value='';$('#pw-err').textContent='';$('#pwsheet').classList.add('open');setTimeout(()=>$('#pw-in').focus(),50)}
+$('#pw-form').onsubmit=async e=>{e.preventDefault();const v=$('#pw-in').value;
+  if($('#pw-form').dataset.mode==='create'){
+    if(v.length<4){$('#pw-err').textContent='Use at least 4 characters.';return}
+    if(v!==$('#pw-in2').value){$('#pw-err').textContent="The two passwords don't match.";return}
+    await saveSettings({pw:await makePw(v),pwAt:Date.now()});sync();
+  } else if(!(await checkPw(v))){$('#pw-err').textContent='Wrong password.';$('#pw-in').select();return}
+  unlockedUntil=Date.now()+5*60e3;$('#pwsheet').classList.remove('open');const t=pwThen;pwThen=null;if(t)t();if(view==='report')renderReport()};
+$('#pw-cancel').onclick=()=>{pwThen=null;$('#pwsheet').classList.remove('open')};
+$('#pwsheet').onclick=e=>{if(e.target.id==='pwsheet')$('#pw-cancel').click()};
+function requestEdit(id){
+  if(!S.settings.pw)return openPw('create',()=>openEdit(id));
+  if(unlocked())return openEdit(id);
+  openPw('unlock',()=>openEdit(id));
+}
+const pad2=n=>String(n).padStart(2,'0');
+function renderEditCats(){$('#e-cats').innerHTML=CATS[editType].map(c=>`<button type="button" class="${c===$('#e-cat').value?'on':''}">${esc(c)}</button>`).join('');document.querySelectorAll('#e-type button').forEach(b=>b.classList.toggle('on',b.dataset.et===editType))}
+function openEdit(id){const x=S.entries.find(e=>e.id===id);if(!x)return;editId=id;editType=x.t;
+  const d=new Date(x.ts);$('#e-amt').value=x.amt;$('#e-cat').value=x.cat;$('#e-note').value=x.note||'';
+  $('#e-ts').value=`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  $('#e-when').textContent=d.toLocaleDateString([], {day:'numeric',month:'short'});$('#e-msg').textContent='';
+  const del=$('#e-del');del.dataset.arm='';del.textContent='Delete';renderEditCats();$('#esheet').classList.add('open')}
+$('#e-type').onclick=e=>{const b=e.target.closest('[data-et]');if(!b)return;editType=b.dataset.et;if(!CATS[editType].includes($('#e-cat').value))$('#e-cat').value=CATS[editType][0];renderEditCats()};
+$('#e-cats').onclick=e=>{const b=e.target.closest('button');if(!b)return;$('#e-cat').value=b.textContent;renderEditCats()};
+$('#e-cat').oninput=renderEditCats;
+$('#e-cancel').onclick=()=>{editId=null;$('#esheet').classList.remove('open')};
+$('#esheet').onclick=e=>{if(e.target.id==='esheet')$('#e-cancel').click()};
+$('#e-save').onclick=async()=>{
+  if(!unlocked()){$('#esheet').classList.remove('open');return openPw('unlock',()=>openEdit(editId))}
+  let a=$('#e-amt').value.trim().replace(/[^\d.,]/g,'');a=(/,\d{1,2}$/.test(a)&&!a.includes('.'))?a.replace(',','.'):a.replace(/,/g,'');const amt=parseFloat(a);
+  if(!(amt>0)){$('#e-msg').textContent='Enter an amount above zero.';return}
+  const cat=$('#e-cat').value.trim().slice(0,30)||'Other',ts=new Date($('#e-ts').value).getTime();
+  if(!isFinite(ts)){$('#e-msg').textContent='Pick a date and time.';return}
+  const x={id:editId,t:editType,cat,amt:Math.round(amt*100)/100,note:$('#e-note').value.trim().slice(0,80),ts};
+  S.entries=S.entries.map(e=>e.id===editId?x:e).sort((a,b)=>a.ts-b.ts);const p=pend();if(p.add[editId])p.add[editId]=x;else p.edit[editId]=x;
+  saveLocal();$('#esheet').classList.remove('open');render();toast('Entry updated');sync()};
+$('#e-del').onclick=async()=>{const b=$('#e-del');
+  if(!unlocked()){$('#esheet').classList.remove('open');return openPw('unlock',()=>openEdit(editId))}
+  if(!b.dataset.arm){b.dataset.arm='1';b.textContent='Tap again to delete';setTimeout(()=>{b.dataset.arm='';b.textContent='Delete'},3000);return}
+  const id=editId;editId=null;$('#esheet').classList.remove('open');const p=pend();if(p.edit[id])delete p.edit[id];await delEntry(id);toast('Entry deleted')};
+function renderPwPanel(){const has=!!S.settings.pw;$('#pw-state').textContent=has?'A password protects editing and deleting entries on all your devices.':'No password yet. Anyone with this app open can edit entries.';$('#pw-cur').hidden=!has;$('#pw-clear').hidden=!has;$('#pw-set').textContent=has?'Change password':'Set password'}
+$('#pw-set').onclick=async()=>{const n=$('#pw-new').value;
+  if(S.settings.pw&&!(await checkPw($('#pw-cur').value))){$('#pw-msg').textContent='Current password is wrong.';return}
+  if(n.length<4){$('#pw-msg').textContent='New password needs at least 4 characters.';return}
+  await saveSettings({pw:await makePw(n),pwAt:Date.now()});$('#pw-cur').value='';$('#pw-new').value='';renderPwPanel();
+  $('#pw-msg').textContent='Saving…';const ok=await sync();$('#pw-msg').textContent=ok||!linked()?'Password saved.':'Password saved on this phone. It will sync once the sheet can be reached.'};
+$('#pw-clear').onclick=async()=>{if(!(await checkPw($('#pw-cur').value))){$('#pw-msg').textContent='Enter the current password first.';return}
+  await saveSettings({pw:'',pwAt:Date.now()});$('#pw-cur').value='';renderPwPanel();$('#pw-msg').textContent='Password removed.';sync()};
+
 /* ---------- views, settings ---------- */
 function show(v){view=v;document.body.classList.toggle('logv',v==='log');$('#v-log').hidden=v!=='log';$('#v-report').hidden=v!=='report';document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);render()}
 function render(){renderLog();if(view==='report'&&mode!=='loading')renderReport()}
 $('#nav').onclick=e=>{const v=e.target.closest('button')?.dataset.v;if(v)show(v)};
 window.addEventListener('hashchange',()=>{const v=location.hash.slice(1);if(v==='log'||v==='report')show(v)});
-$('#gear').onclick=()=>{const t=S.settings;panelEdited=false;$('#s-url').value=t.scriptUrl||'';$('#s-key').value=t.key||'';$('#s-msg').textContent='';$('#sheet').classList.add('open');refreshPanel();if(linked())sync()};
+$('#gear').onclick=()=>{const t=S.settings;panelEdited=false;renderPwPanel();$('#pw-msg').textContent='';$('#s-url').value=t.scriptUrl||'';$('#s-key').value=t.key||'';$('#s-msg').textContent='';$('#sheet').classList.add('open');refreshPanel();if(linked())sync()};
 ['#s-cur','#s-bud','#s-goal'].forEach(q=>$(q).addEventListener('input',()=>{panelEdited=true}));
 $('#s-close').onclick=()=>$('#sheet').classList.remove('open');
 $('#sheet').onclick=e=>{if(e.target.id==='sheet')$('#sheet').classList.remove('open')};
