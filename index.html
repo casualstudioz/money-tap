@@ -158,6 +158,7 @@ h2{flex-wrap:wrap}
 #v-log .subs button{min-height:clamp(32px,4.4vh,38px);font-size:14px;border-color:rgba(143,211,255,.35)}
 .subs button.on{background:var(--sv);color:#06223a;border-color:var(--sv);font-weight:600}
 .subs small{font-size:12px;opacity:.75}
+.subs button.addsub{border-style:dashed;opacity:.9}
 .subl{display:flex;flex-direction:column}
 .subl>div{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:15px}
 .subl>div:first-child{border-top:0}.subl small{display:block;color:var(--mut);font-size:12px}
@@ -233,12 +234,22 @@ h2{flex-wrap:wrap}
   <label for="e-amt">Amount</label><input id="e-amt" inputmode="decimal" autocomplete="off">
   <label for="e-cat">Category</label><input id="e-cat" maxlength="30" autocomplete="off">
   <div class="cats" id="e-cats" style="justify-content:flex-start;margin:8px 0 0"></div>
-  <div id="e-subwrap" hidden><label for="e-sub">Subscription (leave empty for a general bill)</label><input id="e-sub" maxlength="30" autocomplete="off">
+  <div id="e-subwrap" hidden><label for="e-sub">Subscription (type a new name to add it, or leave empty for a general bill)</label><input id="e-sub" maxlength="30" autocomplete="off">
   <div class="cats subs" id="e-subs" style="justify-content:flex-start;margin:8px 0 0"></div></div>
   <label for="e-note">Note</label><input id="e-note" maxlength="80" autocomplete="off">
   <label for="e-ts">Date and time</label><input id="e-ts" type="datetime-local">
   <div class="row2"><button class="btn pri" id="e-save">Save changes</button><button class="btn" id="e-del" style="color:var(--sp)">Delete</button><button class="btn" id="e-cancel">Cancel</button></div>
   <div class="d" id="e-msg" style="margin-top:8px"></div>
+</div></div>
+<div class="sheet" id="nsheet"><div style="max-width:420px">
+  <h2>Add a subscription</h2>
+  <form id="n-form" autocomplete="off">
+  <label for="n-name">Name</label><input id="n-name" maxlength="30" placeholder="e.g. Gym, Canva, ChatGPT">
+  <label for="n-price">Monthly price (optional)</label><input id="n-price" inputmode="decimal" placeholder="0.00">
+  <div class="row2"><button class="btn pri" type="submit">Add and use</button><button class="btn" type="button" id="n-cancel">Cancel</button></div>
+  </form>
+  <div class="d" id="n-err" style="margin-top:8px;color:var(--sp)"></div>
+  <div class="d" style="margin-top:8px">It's added to your list on every device. Change or remove it later in ⚙ Settings.</div>
 </div></div>
 <div class="toast" id="toast"><span id="toast-t"></span><button id="toast-u">Undo</button></div>
 
@@ -260,7 +271,7 @@ const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',k
 const EMBED_URL='https://script.google.com/macros/s/AKfycbxoHHQaJ166ljV_DAT6ZBUi-WAANoZx4a16vE_3zAx2-N7UD9YIHS09Mi5bVamcRF0mQw/exec';
 const EMBED_KEY='Imanz2211@';
 /* ===================================================== */
-const APP_VERSION='2026.11.23-1';
+const APP_VERSION='2026.11.23-2';
 let syncNote='';
 let db=null,col=null,mode='loading',view='log',type='spend',cat='Food',amt='0',period='month',undoId=null,toastT=null;
 
@@ -383,7 +394,7 @@ function renderLog(){
   $('#amt').textContent=amt.replace(/\B(?=(\d{3})+(?!\d))/g,',').replace(/(\.\d*),/g,'$1');
   document.querySelectorAll('#types button').forEach(b=>b.classList.toggle('on',b.dataset.t===type));
   $('#cats').innerHTML=CATS[type].map(c=>`<button class="${c===cat?'on':''}">${esc(c)}</button>`).join('');
-  {const sb=$('#subs');if(type==='spend'&&cat==='Bills'){sb.hidden=false;sb.innerHTML=`<button data-sub="" class="${!sub?'on':''}">General bill</button>`+subsList().map(x=>`<button data-sub="${esc(x.n)}" class="${sub===x.n?'on':''}">${esc(x.n)}${x.a?` <small>${fmt(x.a)}</small>`:''}</button>`).join('')}else{sb.hidden=true;sub=null}}
+  {const sb=$('#subs');if(type==='spend'&&cat==='Bills'){sb.hidden=false;sb.innerHTML=`<button data-sub="" class="${!sub?'on':''}">General bill</button>`+subsList().map(x=>`<button data-sub="${esc(x.n)}" class="${sub===x.n?'on':''}">${esc(x.n)}${x.a?` <small>${fmt(x.a)}</small>`:''}</button>`).join('')+`<button data-newsub="1" class="addsub">＋ Other</button>`}else{sb.hidden=true;sub=null}}
   const go=$('#go');go.dataset.t=type;go.textContent=mode==='loading'?'Connecting…':'Log '+LBL[type];
   const now=new Date(),R=rows(),ms=new Date(now.getFullYear(),now.getMonth(),1),dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
   const spentM=sum(R.filter(x=>x.d>=ms),'spend'),spentT=sum(R.filter(x=>sameDay(x.d,now)),'spend');
@@ -392,7 +403,7 @@ function renderLog(){
 }
 $('#types').onclick=e=>{const t=e.target.closest('button')?.dataset.t;if(!t)return;type=t;cat=CATS[t][0];sub=null;renderLog()};
 $('#cats').onclick=e=>{const b=e.target.closest('button');if(!b)return;cat=b.textContent;sub=null;renderLog()};
-$('#subs').onclick=e=>{const b=e.target.closest('[data-sub]');if(!b)return;sub=b.dataset.sub||null;const s=sub&&subsList().find(x=>x.n===sub);if(s&&s.a&&amt==='0')amt=String(s.a);renderLog()};
+$('#subs').onclick=e=>{if(e.target.closest('[data-newsub]'))return openNewSub();const b=e.target.closest('[data-sub]');if(!b)return;sub=b.dataset.sub||null;const s=sub&&subsList().find(x=>x.n===sub);if(s&&s.a&&amt==='0')amt=String(s.a);renderLog()};
 $('#pad').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.textContent;
   if(k==='⌫')amt=amt.length>1?amt.slice(0,-1):'0';
   else if(k==='.'){if(!amt.includes('.'))amt+='.'}
@@ -577,11 +588,25 @@ $('#e-save').onclick=async()=>{
   const esub=editType==='spend'&&cat==='Bills'?$('#e-sub').value.trim().replace(/\s*\/\s*/g,' ').slice(0,30):'';
   const x={id:editId,t:editType,cat,...(esub?{sub:esub}:{}),amt:Math.round(amt*100)/100,note:$('#e-note').value.trim().slice(0,80),ts};
   S.entries=S.entries.map(e=>e.id===editId?x:e).sort((a,b)=>a.ts-b.ts);const p=pend();if(p.add[editId])p.add[editId]=x;else p.edit[editId]=x;
+  if(esub&&!subsList().some(s=>s.n.toLowerCase()===esub.toLowerCase()))addSub(esub,0);
   saveLocal();$('#esheet').classList.remove('open');render();toast('Entry updated');sync()};
 $('#e-del').onclick=async()=>{const b=$('#e-del');
   if(!unlocked()){$('#esheet').classList.remove('open');return openPw('unlock',()=>openEdit(editId))}
   if(!b.dataset.arm){b.dataset.arm='1';b.textContent='Tap again to delete';setTimeout(()=>{b.dataset.arm='';b.textContent='Delete'},3000);return}
   const id=editId;editId=null;$('#esheet').classList.remove('open');const p=pend();if(p.edit[id])delete p.edit[id];await delEntry(id);toast('Entry deleted')};
+/* Add a subscription to the shared list (or update its price) and sync it */
+function addSub(name,price){const n=String(name||'').trim().replace(/\s*\/\s*/g,' ').slice(0,30);if(!n)return null;
+  const list=subsList().map(x=>({...x})),f=list.find(x=>x.n.toLowerCase()===n.toLowerCase());
+  if(f){if(price>0&&f.a!==price)f.a=price;else return f.n}else list.push({n,a:price>0?Math.round(price*100)/100:0});
+  saveSettings({subs:list,subsAt:Date.now()});sync();return f?f.n:n}
+function openNewSub(){$('#n-name').value='';$('#n-price').value='';$('#n-err').textContent='';$('#nsheet').classList.add('open');setTimeout(()=>$('#n-name').focus(),50)}
+$('#n-form').onsubmit=e=>{e.preventDefault();const price=parseFloat($('#n-price').value.replace(',','.'))||0;
+  if(price<0){$('#n-err').textContent='Price can\'t be negative.';return}
+  const n=addSub($('#n-name').value,price);if(!n){$('#n-err').textContent='Type a name for the subscription.';return}
+  $('#nsheet').classList.remove('open');sub=n;if(price>0&&amt==='0')amt=String(Math.round(price*100)/100);renderLog();toast(`Added ${n} under Bills`)};
+$('#n-name').oninput=()=>{$('#n-err').textContent=''};
+$('#n-cancel').onclick=()=>$('#nsheet').classList.remove('open');
+$('#nsheet').onclick=e=>{if(e.target.id==='nsheet')$('#nsheet').classList.remove('open')};
 let subsDraft=null;
 function renderSubsPanel(){subsDraft=subsList().map(x=>({...x}));drawSubsEd()}
 function drawSubsEd(){$('#subs-ed').innerHTML=subsDraft.map((x,i)=>`<div class="subrow"><input data-i="${i}" data-f="n" value="${esc(x.n)}" placeholder="Name" maxlength="30" aria-label="Subscription name"><input data-i="${i}" data-f="a" value="${x.a||''}" placeholder="Price" inputmode="decimal" aria-label="Monthly price"><button data-rm="${i}" aria-label="Remove ${esc(x.n)}">✕</button></div>`).join('')||'<div class="d" style="margin-top:6px">No subscriptions. Tap Add subscription.</div>'}
