@@ -152,6 +152,19 @@ body.logv .status{flex:none;margin-bottom:clamp(6px,1vh,12px);padding:6px 10px;f
 #esheet .cats button{min-height:36px}
 #pw-form input{width:100%;min-height:46px;border-radius:12px;border:1px solid var(--line);background:var(--bg);padding:10px 12px;font-size:16px}
 #e-ts{color-scheme:dark}
+[hidden]{display:none!important}
+h2{flex-wrap:wrap}
+@media(max-width:360px){.top .seg button{padding:0 11px}.top{gap:6px}}
+#v-log .subs button{min-height:clamp(32px,4.4vh,38px);font-size:14px;border-color:rgba(143,211,255,.35)}
+.subs button.on{background:var(--sv);color:#06223a;border-color:var(--sv);font-weight:600}
+.subs small{font-size:12px;opacity:.75}
+.subl{display:flex;flex-direction:column}
+.subl>div{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:15px}
+.subl>div:first-child{border-top:0}.subl small{display:block;color:var(--mut);font-size:12px}
+.subl b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.st{font-size:12px;font-weight:700;padding:4px 9px;border-radius:99px;white-space:nowrap}.st.ok{background:rgba(143,211,255,.16);color:var(--sv)}.st.due{background:rgba(255,92,138,.14);color:var(--sp)}.st.na{color:var(--mut)}
+.subrow{display:grid;grid-template-columns:minmax(0,1fr) 92px 44px;gap:6px;margin-top:6px}
+.subrow button{min-height:46px;border-radius:12px;border:1px solid var(--line);background:none;color:var(--mut)}
 @media (prefers-reduced-motion:reduce){.toast,.go{transition:none;animation:none}}
 </style></head><body>
 <div class="app">
@@ -166,6 +179,7 @@ body.logv .status{flex:none;margin-bottom:clamp(6px,1vh,12px);padding:6px 10px;f
     <div class="types" id="types"><button data-t="spend">Spend</button><button data-t="save">Save</button><button data-t="inc">Income</button></div>
     <div class="amount"><div class="n"><span class="c" id="cur">B$</span><span id="amt">0</span></div><div class="s" id="today">&nbsp;</div></div>
     <div class="cats" id="cats"></div>
+    <div class="cats subs" id="subs" hidden aria-label="Subscription"></div>
     <input class="note" id="note" placeholder="Note (optional)" maxlength="80" autocomplete="off">
     <div class="pad" id="pad"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button><button>6</button><button>7</button><button>8</button><button>9</button><button>.</button><button>0</button><button aria-label="Delete digit">⌫</button></div>
     <button class="go" id="go" disabled>Log spend</button>
@@ -185,6 +199,11 @@ body.logv .status{flex:none;margin-bottom:clamp(6px,1vh,12px);padding:6px 10px;f
   <label for="s-url">Apps Script web app URL</label><input id="s-url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec">
   <label for="s-key">Sheet key (the KEY you set in the script)</label><input id="s-key" autocomplete="off">
   <div class="row2"><button class="btn" id="g-pull">Load from sheet</button><button class="btn" id="g-push">Upload all to sheet</button></div>
+  <label>Subscriptions under Bills</label>
+  <div class="d">Pick these when you log a bill. Add the monthly price to track what's paid and what's due.</div>
+  <div id="subs-ed"></div>
+  <div class="row2"><button class="btn" id="subs-add">Add subscription</button><button class="btn pri" id="subs-save">Save subscriptions</button></div>
+  <div class="d" id="subs-msg" style="margin-top:6px"></div>
   <label>Edit password</label>
   <div class="d" id="pw-state"></div>
   <input type="password" id="pw-cur" placeholder="Current password" autocomplete="current-password" style="margin-top:8px">
@@ -214,6 +233,8 @@ body.logv .status{flex:none;margin-bottom:clamp(6px,1vh,12px);padding:6px 10px;f
   <label for="e-amt">Amount</label><input id="e-amt" inputmode="decimal" autocomplete="off">
   <label for="e-cat">Category</label><input id="e-cat" maxlength="30" autocomplete="off">
   <div class="cats" id="e-cats" style="justify-content:flex-start;margin:8px 0 0"></div>
+  <div id="e-subwrap" hidden><label for="e-sub">Subscription (leave empty for a general bill)</label><input id="e-sub" maxlength="30" autocomplete="off">
+  <div class="cats subs" id="e-subs" style="justify-content:flex-start;margin:8px 0 0"></div></div>
   <label for="e-note">Note</label><input id="e-note" maxlength="80" autocomplete="off">
   <label for="e-ts">Date and time</label><input id="e-ts" type="datetime-local">
   <div class="row2"><button class="btn pri" id="e-save">Save changes</button><button class="btn" id="e-del" style="color:var(--sp)">Delete</button><button class="btn" id="e-cancel">Cancel</button></div>
@@ -239,7 +260,7 @@ const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',k
 const EMBED_URL='https://script.google.com/macros/s/AKfycbxoHHQaJ166ljV_DAT6ZBUi-WAANoZx4a16vE_3zAx2-N7UD9YIHS09Mi5bVamcRF0mQw/exec';
 const EMBED_KEY='Imanz2211@';
 /* ===================================================== */
-const APP_VERSION='2026.11.22-3';
+const APP_VERSION='2026.11.23-1';
 let syncNote='';
 let db=null,col=null,mode='loading',view='log',type='spend',cat='Food',amt='0',period='month',undoId=null,toastT=null;
 
@@ -257,17 +278,24 @@ function applyEmbed(){if(EMBED_URL&&!(S.settings.scriptUrl||'').trim()){S.settin
 function saveLocal(){try{localStorage.setItem('moneytap',JSON.stringify(S))}catch(e){}}
 const z2=n=>String(n).padStart(2,'0');
 const linked=()=>!!(S.settings.scriptUrl||'').trim();
-function sheetRow(x){const d=new Date(x.ts);return[`${d.getFullYear()}-${z2(d.getMonth()+1)}-${z2(d.getDate())} ${z2(d.getHours())}:${z2(d.getMinutes())}`,`${d.getFullYear()}-${z2(d.getMonth()+1)}`,{spend:'Spend',save:'Save',inc:'Income'}[x.t],x.cat,x.amt,x.note||'',x.id]}
+function sheetRow(x){const d=new Date(x.ts);return[`${d.getFullYear()}-${z2(d.getMonth()+1)}-${z2(d.getDate())} ${z2(d.getHours())}:${z2(d.getMinutes())}`,`${d.getFullYear()}-${z2(d.getMonth()+1)}`,{spend:'Spend',save:'Save',inc:'Income'}[x.t],x.sub?x.cat+' / '+x.sub:x.cat,x.amt,x.note||'',x.id]}
 function fromRow(r){const m=String(r[0]).match(/(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);if(!m)return null;
   const t={spend:'spend',save:'save',income:'inc'}[String(r[2]).trim().toLowerCase()];const amt=parseFloat(String(r[4]).replace(/[^\d.]/g,''));if(!t||!(amt>0))return null;
-  return{id:String(r[6]||('s'+m.slice(1).join('')+Math.random().toString(36).slice(2,6))),t,cat:String(r[3]||'Other'),amt,note:String(r[5]||''),ts:new Date(+m[1],m[2]-1,+m[3],+(m[4]||12),+(m[5]||0)).getTime()}}
+  return{id:String(r[6]||('s'+m.slice(1).join('')+Math.random().toString(36).slice(2,6))),t,...splitCat(String(r[3]||'Other')),amt,note:String(r[5]||''),ts:new Date(+m[1],m[2]-1,+m[3],+(m[4]||12),+(m[5]||0)).getTime()}}
+function splitCat(c){const i=c.indexOf(' / ');return i>0?{cat:c.slice(0,i).trim()||'Other',sub:c.slice(i+3).trim()}:{cat:c.trim()||'Other'}}
 async function api(body){
   const u=(S.settings.scriptUrl||'').trim(),k=S.settings.key||'';if(!u)throw new Error('nourl');
   const r=body?await fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({key:k,...body})}):await fetch(u+(u.includes('?')?'&':'?')+'key='+encodeURIComponent(k)+'&t='+Date.now());
   const j=await r.json();if(!j.ok)throw new Error(j.error||'refused');return j}
 function syncErr(e){const m=String(e&&e.message||'');return m==='bad key'?'The sheet key doesn\'t match. Check it in settings.':"Couldn't reach your Google Sheet. Entries are kept on this phone and will sync later."}
 function setSync(t){syncNote=t;const g=$('#g-state');if(g)g.textContent=t||(linked()?'Connected. Every entry is copied to your Google Sheet.':'Not connected. Entries are saved on this phone only.');renderLog()}
-const SET_ID='app-settings';
+const SET_ID='app-settings',SUBS_ID='app-subs';
+const SUBS_DEFAULT=[{n:'Netflix',a:0},{n:'Spotify',a:0},{n:'YouTube Premium',a:0},{n:'iCloud+',a:0},{n:'Disney+',a:0},{n:'Phone plan',a:0},{n:'Internet',a:0}];
+const subsList=()=>Array.isArray(S.settings.subs)?S.settings.subs:SUBS_DEFAULT;
+/* Subscriptions live in one row of the Ledger tab: SUBS | | Subscriptions | [list as JSON] | | | app-subs:<changed-at ms> */
+function subsRow(){return['SUBS','','Subscriptions',JSON.stringify(subsList()),'','',SUBS_ID+':'+(+S.settings.subsAt||0)]}
+function readSubsRow(rows){const r=rows.find(r=>String(r[6]).startsWith(SUBS_ID));if(!r)return null;let l=null;try{l=JSON.parse(String(r[3]))}catch(e){}
+  if(!Array.isArray(l))return null;return{list:l.filter(x=>x&&x.n).map(x=>({n:String(x.n).slice(0,30),a:Math.max(0,+x.a||0)})),at:parseInt(String(r[6]).split(':')[1])||0}}
 /* Settings live in one row of the Ledger tab: SETTINGS | | Settings | currency | budget | goal | app-settings:<changed-at ms>
    The newest change wins, so a device that missed an update can never write old values back. */
 function settingsRow(){const t=S.settings;return['SETTINGS','','Settings',t.currency,+t.budget||0,String(+t.goal||0),SET_ID+':'+(+t.updatedAt||0)+':'+(t.pw||'')+':'+(+t.pwAt||0)]}
@@ -297,13 +325,15 @@ async function doSync(o){
       if(sh.pwReset){S.settings.pw='';S.settings.pwAt=Date.now();writeAll=true} // cell reset in the sheet = password removed
       else if(sh.pwAt>=(+S.settings.pwAt||0)){S.settings.pw=sh.pw;S.settings.pwAt=sh.pwAt}else writeAll=true;
     }
+    const sb=readSubsRow(rows);
+    if(sb){if(sb.at>=(+S.settings.subsAt||0)){S.settings.subs=sb.list;S.settings.subsAt=sb.at}else writeAll=true}else writeAll=true;
     const sheetE=rows.map(fromRow).filter(Boolean),ids=new Set(sheetE.map(x=>x.id));
     for(const id in p.add)if(ids.has(id))delete p.add[id]; // already in the sheet
     const adds=Object.values(p.add);
     let merged=o.overwrite?S.entries.slice():sheetE.filter(x=>!p.del[x.id]).map(x=>p.edit[x.id]||x).concat(adds);
     merged.sort((a,b)=>a.ts-b.ts);
     if(sheetE.some(x=>p.del[x.id]||p.edit[x.id]))writeAll=true;
-    if(writeAll)await api({action:'replace',rows:[settingsRow(),...merged.map(sheetRow)]});
+    if(writeAll)await api({action:'replace',rows:[settingsRow(),subsRow(),...merged.map(sheetRow)]});
     else if(adds.length)await api({action:'append',rows:adds.map(sheetRow)});
     p.add={};p.del={};p.edit={};
     S.entries=merged;lastSync=new Date();saveLocal();
@@ -347,19 +377,22 @@ function refreshPanel(){
 }
 
 /* ---------- log view ---------- */
+let sub=null;
 function renderLog(){
   $('#cur').textContent=S.settings.currency;
   $('#amt').textContent=amt.replace(/\B(?=(\d{3})+(?!\d))/g,',').replace(/(\.\d*),/g,'$1');
   document.querySelectorAll('#types button').forEach(b=>b.classList.toggle('on',b.dataset.t===type));
   $('#cats').innerHTML=CATS[type].map(c=>`<button class="${c===cat?'on':''}">${esc(c)}</button>`).join('');
+  {const sb=$('#subs');if(type==='spend'&&cat==='Bills'){sb.hidden=false;sb.innerHTML=`<button data-sub="" class="${!sub?'on':''}">General bill</button>`+subsList().map(x=>`<button data-sub="${esc(x.n)}" class="${sub===x.n?'on':''}">${esc(x.n)}${x.a?` <small>${fmt(x.a)}</small>`:''}</button>`).join('')}else{sb.hidden=true;sub=null}}
   const go=$('#go');go.dataset.t=type;go.textContent=mode==='loading'?'Connecting…':'Log '+LBL[type];
   const now=new Date(),R=rows(),ms=new Date(now.getFullYear(),now.getMonth(),1),dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
   const spentM=sum(R.filter(x=>x.d>=ms),'spend'),spentT=sum(R.filter(x=>sameDay(x.d,now)),'spend');
   const safe=Math.max(0,S.settings.budget-spentM)/(dim-now.getDate()+1);
   $('#today').textContent=mode==='loading'?' ':(syncNote&&!/^Synced|^Syncing/.test(syncNote)?syncNote+' · ':'')+`Today ${fmt(spentT)} spent · safe to spend today ${fmt(Math.round(safe*100)/100)}`;
 }
-$('#types').onclick=e=>{const t=e.target.closest('button')?.dataset.t;if(!t)return;type=t;cat=CATS[t][0];renderLog()};
-$('#cats').onclick=e=>{const b=e.target.closest('button');if(!b)return;cat=b.textContent;renderLog()};
+$('#types').onclick=e=>{const t=e.target.closest('button')?.dataset.t;if(!t)return;type=t;cat=CATS[t][0];sub=null;renderLog()};
+$('#cats').onclick=e=>{const b=e.target.closest('button');if(!b)return;cat=b.textContent;sub=null;renderLog()};
+$('#subs').onclick=e=>{const b=e.target.closest('[data-sub]');if(!b)return;sub=b.dataset.sub||null;const s=sub&&subsList().find(x=>x.n===sub);if(s&&s.a&&amt==='0')amt=String(s.a);renderLog()};
 $('#pad').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.textContent;
   if(k==='⌫')amt=amt.length>1?amt.slice(0,-1):'0';
   else if(k==='.'){if(!amt.includes('.'))amt+='.'}
@@ -369,8 +402,8 @@ $('#go').onclick=async()=>{
   const v=parseFloat(amt);const go=$('#go');
   if(!(v>0)){go.classList.remove('shake');void go.offsetWidth;go.classList.add('shake');return}
   go.disabled=true;
-  try{const e={t:type,cat,amt:v,note:$('#note').value.trim().slice(0,80),ts:Date.now()};const id=await addEntry(e);
-    toast(`Logged ${type==='spend'?'−':'+'}${fmt(v)} · ${cat}`,id);amt='0';$('#note').value='';}
+  try{const e={t:type,cat,...(sub?{sub}:{}),amt:v,note:$('#note').value.trim().slice(0,80),ts:Date.now()};const id=await addEntry(e);
+    toast(`Logged ${type==='spend'?'−':'+'}${fmt(v)} · ${cat}${sub?' / '+sub:''}`,id);amt='0';sub=null;$('#note').value='';}
   catch(err){toast(err&&err.code==='quota_exceeded'?'Storage is full. Delete old entries.':"Couldn't save. Try again.")}
   go.disabled=false;renderLog()};
 function toast(t,id){undoId=id||null;$('#toast-t').textContent=t;$('#toast-u').hidden=!id;$('#toast').classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>$('#toast').classList.remove('show'),4500)}
@@ -425,6 +458,17 @@ function renderReport(){
    h+=`<div class="card"><h2>By category <span>${period==='all'?'all time':'vs last period'}</span></h2>
    <div class="ctabs">${['spend','save','inc'].map(t=>`<button data-ct="${t}" class="${catType===t?'on':''}">${CT[t].l}</button>`).join('')}</div>
    ${cp.length?`<div class="donutwrap"><svg viewBox="0 0 180 180" role="img" aria-label="${CT[catType].l} by category"><circle cx="90" cy="90" r="${r}" fill="none" stroke="rgba(143,211,255,.08)" stroke-width="22"/>${segs}${center}</svg><div class="leg">${leg}</div></div>`:`<div class="empty" style="padding:24px 8px">No ${CT[catType].l.toLowerCase()} logged in this period.</div>`}</div>`}
+  let subMonthly=0;
+  {const mS=new Date(now.getFullYear(),now.getMonth(),1),list=subsList(),isSub=x=>x.t==='spend'&&x.cat==='Bills'&&x.sub;
+   const paidM=ALL.filter(x=>isSub(x)&&x.d>=mS),names=[...new Set([...list.map(s=>s.n),...paidM.map(x=>x.sub)])];
+   const lastPaid=n=>{for(let i=ALL.length-1;i>=0;i--){if(isSub(ALL[i])&&ALL[i].sub===n)return ALL[i]}return null};
+   const items=names.map(n=>{const s=list.find(x=>x.n===n),paid=paidM.filter(x=>x.sub===n).reduce((a,x)=>a+x.amt,0),lp=lastPaid(n),price=s&&s.a?s.a:(lp?lp.amt:0);return{n,price,paid,lp}}).filter(i=>i.price>0||i.paid>0).sort((a,b)=>b.price-a.price);
+   subMonthly=items.reduce((a,i)=>a+i.price,0);const paidTot=items.reduce((a,i)=>a+Math.min(i.paid,i.price||i.paid),0),billsM=sum(ALL.filter(x=>x.t==='spend'&&x.cat==='Bills'&&x.d>=mS),'spend');
+   h+=`<div class="card"><h2>Monthly subscriptions <span>${subMonthly?fmt(Math.round(subMonthly*100)/100)+' a month':''}</span></h2>`+(items.length?`
+   <div class="meter"><i style="width:${subMonthly?Math.min(paidTot/subMonthly,1)*100:0}%;background:var(--sv)"></i></div>
+   <div class="d" style="margin-bottom:6px">${fmt(Math.round(paidTot*100)/100)} paid of ${fmt(Math.round(subMonthly*100)/100)} this month · ${fmt(Math.round(subMonthly*12))} a year${billsM?` · ${Math.round(paidM.reduce((a,x)=>a+x.amt,0)/billsM*100)}% of this month's bills`:''}</div>
+   <div class="subl">${items.map(i=>`<div><span>${esc(i.n)}<small>${i.lp?'Last paid '+i.lp.d.getDate()+' '+MON[i.lp.d.getMonth()]:'Not paid yet'}</small></span><b>${i.price?fmt(i.price):''}</b>${i.paid?`<span class="st ok">Paid ${fmt(i.paid)}</span>`:i.price?`<span class="st due">Due</span>`:`<span class="st na">—</span>`}</div>`).join('')}</div>`
+   :`<div class="d">No subscriptions yet. On the Log screen pick <b>Bills</b>, then the subscription. Add monthly prices in ⚙ Settings to see what's due.</div>`)+`</div>`}
   let bk=[];const days=Math.round(len/864e5);
   if(days<=31){for(let i=0;i<days;i++){const d=new Date(s.getFullYear(),s.getMonth(),s.getDate()+i);if(d>now)break;bk.push({l:String(d.getDate()),v:sum(R.filter(x=>sameDay(x.d,d)),'spend')})}}
   else{const c=new Date(s.getFullYear(),s.getMonth(),1);while(c<e&&c<=now){const y=c.getFullYear(),m=c.getMonth();bk.push({l:MON[m],v:sum(R.filter(x=>x.d.getFullYear()===y&&x.d.getMonth()===m),'spend')});c.setMonth(m+1)}bk=bk.slice(-12)}
@@ -449,9 +493,10 @@ function renderReport(){
   const nsd=Array.from({length:dom},(_,i)=>i+1).filter(i=>!dayS(i)).length;I.push(['',`${nsd} no-spend day${nsd===1?'':'s'} so far this month.`]);
   if(chg!==null)I.push([chg>0?'bad':'',`Spending is ${Math.abs(chg*100).toFixed(0)}% ${chg>0?'higher':'lower'} than the same point last period.`]);
   if(inc)I.push([rate>=.2?'':'bad',rate>=.2?`Your savings rate of ${(rate*100).toFixed(0)}% beats the common 20% guideline.`:`Savings rate is ${(rate*100).toFixed(0)}%. Saving ${fmt(Math.ceil(inc*.2-sv))} more would reach 20%.`]);
+  if(subMonthly)I.push(['',`Subscriptions cost ${fmt(Math.round(subMonthly*100)/100)} a month, about ${fmt(Math.round(subMonthly*12))} a year.`]);
   if(proj>B)I.push(['bad',`To finish on budget, keep spending under ${fmt(Math.round(safe*100)/100)} a day.`]);
   h+=`<div class="card"><h2>Insights</h2><ul class="ins">${I.map(([c,t])=>`<li class="${c}">${t}</li>`).join('')}</ul></div>`;
-  h+=`<div class="card"><h2>Entries <span>${R.length} in period</span></h2><div class="tx">${R.slice(-25).reverse().map(x=>`<div data-edit="${esc(x.id)}" style="cursor:pointer"><span class="m">${esc(x.cat)}<small>${x.d.getDate()} ${MON[x.d.getMonth()]} ${String(x.d.getHours()).padStart(2,'0')}:${String(x.d.getMinutes()).padStart(2,'0')}${x.note?' · '+esc(x.note):''}</small></span><b style="color:${COL[x.t]}">${x.t==='spend'?'−':'+'}${fmt(x.amt)}</b><button class="del" data-edit="${esc(x.id)}" aria-label="Edit entry">${unlocked()?'Edit':'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'}</button></div>`).join('')}</div><div class="d" style="margin-top:6px">${R.length>25?'Showing the latest 25. ':''}Tap an entry to edit or delete it${S.settings.pw?' (password protected)':''}.</div></div>
+  h+=`<div class="card"><h2>Entries <span>${R.length} in period</span></h2><div class="tx">${R.slice(-25).reverse().map(x=>`<div data-edit="${esc(x.id)}" style="cursor:pointer"><span class="m">${esc(x.cat)}${x.sub?' · '+esc(x.sub):''}<small>${x.d.getDate()} ${MON[x.d.getMonth()]} ${String(x.d.getHours()).padStart(2,'0')}:${String(x.d.getMinutes()).padStart(2,'0')}${x.note?' · '+esc(x.note):''}</small></span><b style="color:${COL[x.t]}">${x.t==='spend'?'−':'+'}${fmt(x.amt)}</b><button class="del" data-edit="${esc(x.id)}" aria-label="Edit entry">${unlocked()?'Edit':'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'}</button></div>`).join('')}</div><div class="d" style="margin-top:6px">${R.length>25?'Showing the latest 25. ':''}Tap an entry to edit or delete it${S.settings.pw?' (password protected)':''}.</div></div>
   <div class="foot">${ALL.length} entries · ${linked()?'synced with your Google Sheet':'saved on this phone'}</div>`;
   el.innerHTML=h;drawCharts(true);
 }
@@ -511,15 +556,16 @@ function requestEdit(id){
   openPw('unlock',()=>openEdit(id));
 }
 const pad2=n=>String(n).padStart(2,'0');
-function renderEditCats(){$('#e-cats').innerHTML=CATS[editType].map(c=>`<button type="button" class="${c===$('#e-cat').value?'on':''}">${esc(c)}</button>`).join('');document.querySelectorAll('#e-type button').forEach(b=>b.classList.toggle('on',b.dataset.et===editType))}
+function renderEditCats(){const isB=editType==='spend'&&$('#e-cat').value.trim()==='Bills';$('#e-subwrap').hidden=!isB;if(isB)$('#e-subs').innerHTML=subsList().map(x=>`<button type="button" class="${x.n===$('#e-sub').value.trim()?'on':''}">${esc(x.n)}</button>`).join('');$('#e-cats').innerHTML=CATS[editType].map(c=>`<button type="button" class="${c===$('#e-cat').value?'on':''}">${esc(c)}</button>`).join('');document.querySelectorAll('#e-type button').forEach(b=>b.classList.toggle('on',b.dataset.et===editType))}
 function openEdit(id){const x=S.entries.find(e=>e.id===id);if(!x)return;editId=id;editType=x.t;
-  const d=new Date(x.ts);$('#e-amt').value=x.amt;$('#e-cat').value=x.cat;$('#e-note').value=x.note||'';
+  const d=new Date(x.ts);$('#e-amt').value=x.amt;$('#e-cat').value=x.cat;$('#e-note').value=x.note||'';$('#e-sub').value=x.sub||'';
   $('#e-ts').value=`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   $('#e-when').textContent=d.toLocaleDateString([], {day:'numeric',month:'short'});$('#e-msg').textContent='';
   const del=$('#e-del');del.dataset.arm='';del.textContent='Delete';renderEditCats();$('#esheet').classList.add('open')}
 $('#e-type').onclick=e=>{const b=e.target.closest('[data-et]');if(!b)return;editType=b.dataset.et;if(!CATS[editType].includes($('#e-cat').value))$('#e-cat').value=CATS[editType][0];renderEditCats()};
 $('#e-cats').onclick=e=>{const b=e.target.closest('button');if(!b)return;$('#e-cat').value=b.textContent;renderEditCats()};
-$('#e-cat').oninput=renderEditCats;
+$('#e-cat').oninput=renderEditCats;$('#e-sub').oninput=renderEditCats;
+$('#e-subs').onclick=e=>{const b=e.target.closest('button');if(!b)return;$('#e-sub').value=$('#e-sub').value.trim()===b.textContent?'':b.textContent;renderEditCats()};
 $('#e-cancel').onclick=()=>{editId=null;$('#esheet').classList.remove('open')};
 $('#esheet').onclick=e=>{if(e.target.id==='esheet')$('#e-cancel').click()};
 $('#e-save').onclick=async()=>{
@@ -528,13 +574,22 @@ $('#e-save').onclick=async()=>{
   if(!(amt>0)){$('#e-msg').textContent='Enter an amount above zero.';return}
   const cat=$('#e-cat').value.trim().slice(0,30)||'Other',ts=new Date($('#e-ts').value).getTime();
   if(!isFinite(ts)){$('#e-msg').textContent='Pick a date and time.';return}
-  const x={id:editId,t:editType,cat,amt:Math.round(amt*100)/100,note:$('#e-note').value.trim().slice(0,80),ts};
+  const esub=editType==='spend'&&cat==='Bills'?$('#e-sub').value.trim().replace(/\s*\/\s*/g,' ').slice(0,30):'';
+  const x={id:editId,t:editType,cat,...(esub?{sub:esub}:{}),amt:Math.round(amt*100)/100,note:$('#e-note').value.trim().slice(0,80),ts};
   S.entries=S.entries.map(e=>e.id===editId?x:e).sort((a,b)=>a.ts-b.ts);const p=pend();if(p.add[editId])p.add[editId]=x;else p.edit[editId]=x;
   saveLocal();$('#esheet').classList.remove('open');render();toast('Entry updated');sync()};
 $('#e-del').onclick=async()=>{const b=$('#e-del');
   if(!unlocked()){$('#esheet').classList.remove('open');return openPw('unlock',()=>openEdit(editId))}
   if(!b.dataset.arm){b.dataset.arm='1';b.textContent='Tap again to delete';setTimeout(()=>{b.dataset.arm='';b.textContent='Delete'},3000);return}
   const id=editId;editId=null;$('#esheet').classList.remove('open');const p=pend();if(p.edit[id])delete p.edit[id];await delEntry(id);toast('Entry deleted')};
+let subsDraft=null;
+function renderSubsPanel(){subsDraft=subsList().map(x=>({...x}));drawSubsEd()}
+function drawSubsEd(){$('#subs-ed').innerHTML=subsDraft.map((x,i)=>`<div class="subrow"><input data-i="${i}" data-f="n" value="${esc(x.n)}" placeholder="Name" maxlength="30" aria-label="Subscription name"><input data-i="${i}" data-f="a" value="${x.a||''}" placeholder="Price" inputmode="decimal" aria-label="Monthly price"><button data-rm="${i}" aria-label="Remove ${esc(x.n)}">✕</button></div>`).join('')||'<div class="d" style="margin-top:6px">No subscriptions. Tap Add subscription.</div>'}
+$('#subs-ed').oninput=e=>{const t=e.target;if(!t.dataset.f)return;const x=subsDraft[+t.dataset.i];if(t.dataset.f==='n')x.n=t.value;else x.a=parseFloat(t.value.replace(',','.'))||0};
+$('#subs-ed').onclick=e=>{const b=e.target.closest('[data-rm]');if(!b)return;subsDraft.splice(+b.dataset.rm,1);drawSubsEd()};
+$('#subs-add').onclick=()=>{subsDraft.push({n:'',a:0});drawSubsEd();const ins=$('#subs-ed').querySelectorAll('input[data-f=n]');ins[ins.length-1].focus()};
+$('#subs-save').onclick=async()=>{const seen=new Set(),list=[];for(const x of subsDraft){const n=x.n.trim().replace(/\s*\/\s*/g,' ').slice(0,30);if(!n||seen.has(n.toLowerCase()))continue;seen.add(n.toLowerCase());list.push({n,a:Math.round((+x.a||0)*100)/100})}
+  await saveSettings({subs:list,subsAt:Date.now()});renderSubsPanel();$('#subs-msg').textContent='Saving…';const ok=await sync();$('#subs-msg').textContent=ok||!linked()?`Saved ${list.length} subscription${list.length===1?'':'s'}.`:'Saved on this phone. It will sync once the sheet can be reached.'};
 function renderPwPanel(){const has=!!S.settings.pw;$('#pw-state').textContent=has?'A password protects editing and deleting entries on all your devices.':'No password yet. Anyone with this app open can edit entries.';$('#pw-cur').hidden=!has;$('#pw-clear').hidden=!has;$('#pw-set').textContent=has?'Change password':'Set password'}
 $('#pw-set').onclick=async()=>{const n=$('#pw-new').value;
   if(S.settings.pw&&!(await checkPw($('#pw-cur').value))){$('#pw-msg').textContent='Current password is wrong.';return}
@@ -549,7 +604,7 @@ function show(v){view=v;document.body.classList.toggle('logv',v==='log');$('#v-l
 function render(){renderLog();if(view==='report'&&mode!=='loading')renderReport()}
 $('#nav').onclick=e=>{const v=e.target.closest('button')?.dataset.v;if(v)show(v)};
 window.addEventListener('hashchange',()=>{const v=location.hash.slice(1);if(v==='log'||v==='report')show(v)});
-$('#gear').onclick=()=>{const t=S.settings;panelEdited=false;renderPwPanel();$('#pw-msg').textContent='';$('#s-url').value=t.scriptUrl||'';$('#s-key').value=t.key||'';$('#s-msg').textContent='';$('#sheet').classList.add('open');refreshPanel();if(linked())sync()};
+$('#gear').onclick=()=>{const t=S.settings;panelEdited=false;renderPwPanel();renderSubsPanel();$('#subs-msg').textContent='';$('#pw-msg').textContent='';$('#s-url').value=t.scriptUrl||'';$('#s-key').value=t.key||'';$('#s-msg').textContent='';$('#sheet').classList.add('open');refreshPanel();if(linked())sync()};
 ['#s-cur','#s-bud','#s-goal'].forEach(q=>$(q).addEventListener('input',()=>{panelEdited=true}));
 $('#s-close').onclick=()=>$('#sheet').classList.remove('open');
 $('#sheet').onclick=e=>{if(e.target.id==='sheet')$('#sheet').classList.remove('open')};
