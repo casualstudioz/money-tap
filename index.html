@@ -161,6 +161,8 @@ h2{flex-wrap:wrap}
 .subs small{font-size:12px;opacity:.75}
 .subs button.addsub{border-style:dashed;opacity:.9}
 .cats button.addsub{border-style:dashed;opacity:.9}
+.cated{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}.cated span{font-size:13px;color:var(--mut);min-width:52px}
+.cated button{border:1px solid var(--line);background:var(--pan);border-radius:99px;min-height:36px;padding:0 12px;font-size:14px;color:var(--ink)}
 .grid .card.wide{grid-column:1/-1}
 .debtl>div{padding:10px 0;border-top:1px solid var(--line)}.debtl>div:first-child{border-top:0}
 .debtl .h{display:flex;justify-content:space-between;gap:10px;font-size:15px}.debtl .h b{font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -211,6 +213,9 @@ h2{flex-wrap:wrap}
   <div id="subs-ed"></div>
   <div class="row2"><button class="btn" id="subs-add">Add subscription</button><button class="btn pri" id="subs-save">Save subscriptions</button></div>
   <div class="d" id="subs-msg" style="margin-top:6px"></div>
+  <label>Your categories</label>
+  <div class="d">Add your own on the Log screen with <b>＋ Add</b> under Spend, Save or Income. Tap ✕ to remove one; entries already logged keep their category.</div>
+  <div id="cats-ed"></div>
   <label>Debts</label>
   <div class="d">Pick these when you log a debt payment. Add the total you owe to see how much is left.</div>
   <div id="debts-ed"></div>
@@ -256,7 +261,7 @@ h2{flex-wrap:wrap}
   <h2 id="n-title">Add a subscription</h2>
   <form id="n-form" autocomplete="off">
   <label for="n-name">Name</label><input id="n-name" maxlength="30" placeholder="e.g. Gym, Canva, ChatGPT">
-  <label for="n-price" id="n-plabel">Monthly price (optional)</label><input id="n-price" inputmode="decimal" placeholder="0.00">
+  <div id="n-pwrap"><label for="n-price" id="n-plabel">Monthly price (optional)</label><input id="n-price" inputmode="decimal" placeholder="0.00"></div>
   <div class="row2"><button class="btn pri" type="submit">Add and use</button><button class="btn" type="button" id="n-cancel">Cancel</button></div>
   </form>
   <div class="d" id="n-err" style="margin-top:8px;color:var(--sp)"></div>
@@ -284,7 +289,7 @@ const S={entries:[],settings:{currency:'B$',budget:1500,goal:5000,scriptUrl:'',k
 const EMBED_URL='https://script.google.com/macros/s/AKfycbxoHHQaJ166ljV_DAT6ZBUi-WAANoZx4a16vE_3zAx2-N7UD9YIHS09Mi5bVamcRF0mQw/exec';
 const EMBED_KEY='Imanz2211@';
 /* ===================================================== */
-const APP_VERSION='2026.11.23-3';
+const APP_VERSION='2026.11.23-4';
 let syncNote='';
 let db=null,col=null,mode='loading',view='log',type='spend',cat='Food',amt='0',period='month',undoId=null,toastT=null;
 
@@ -333,8 +338,15 @@ const debtsList=()=>Array.isArray(S.settings.debts)?S.settings.debts:DEBTS_DEFAU
 function debtsRow(){return['DEBTS','','Debts',JSON.stringify(debtsList()),'','',DEBTS_ID+':'+(+S.settings.debtsAt||0)]}
 function readDebtsRow(rows){const r=rows.find(r=>String(r[6]).startsWith(DEBTS_ID));if(!r)return null;let l=null;try{l=JSON.parse(String(r[3]))}catch(e){}
   if(!Array.isArray(l))return null;return{list:l.filter(x=>x&&x.n).map(x=>({n:String(x.n).slice(0,30),a:Math.max(0,+x.a||0)})),at:parseInt(String(r[6]).split(':')[1])||0}}
-/* categories for a type; Debt uses your own list of debts */
-const catsFor=t=>t==='debt'?(debtsList().length?debtsList().map(x=>x.n):['Other debt']):CATS[t];
+const CATS_ID='app-cats';
+const customCats=t=>{const c=S.settings.cats;return c&&Array.isArray(c[t])?c[t]:[]};
+/* Your own categories live in one row of the Ledger tab: CATS | | Categories | {"spend":[...],"save":[...],"inc":[...]} | | | app-cats:<changed-at ms> */
+function catsRow(){return['CATS','','Categories',JSON.stringify({spend:customCats('spend'),save:customCats('save'),inc:customCats('inc')}),'','',CATS_ID+':'+(+S.settings.catsAt||0)]}
+function readCatsRow(rows){const r=rows.find(r=>String(r[6]).startsWith(CATS_ID));if(!r)return null;let o=null;try{o=JSON.parse(String(r[3]))}catch(e){}
+  if(!o||typeof o!=='object')return null;const c={};for(const t of['spend','save','inc'])c[t]=Array.isArray(o[t])?o[t].map(x=>String(x).slice(0,30)).filter(Boolean):[];return{cats:c,at:parseInt(String(r[6]).split(':')[1])||0}}
+/* categories for a type: built-in ones, then yours (kept before "Other"); Debt uses your own list of debts */
+const catsFor=t=>{if(t==='debt')return debtsList().length?debtsList().map(x=>x.n):['Other debt'];
+  const b=CATS[t],o=b.includes('Other')?b.filter(x=>x!=='Other'):b.slice(),mine=customCats(t).filter(x=>!b.some(y=>y.toLowerCase()===x.toLowerCase()));return[...o,...mine,...(b.includes('Other')?['Other']:[])]};
 function pend(){if(!S.pend||typeof S.pend!=='object')S.pend={add:{},del:{}};S.pend.add=S.pend.add||{};S.pend.del=S.pend.del||{};S.pend.edit=S.pend.edit||{};return S.pend}
 let lastSync=null,syncState='idle',chain=Promise.resolve(),queued=0,panelEdited=false;
 function checkUpdate(){fetch('version.json?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.v&&j.v!==APP_VERSION){let k='mt_rl_'+j.v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,'1')}catch(e){}location.reload()}}).catch(()=>{})}
@@ -360,6 +372,8 @@ async function doSync(o){
     }
     const sb=readSubsRow(rows);
     if(sb){if(sb.at>=(+S.settings.subsAt||0)){S.settings.subs=sb.list;S.settings.subsAt=sb.at}else writeAll=true}else writeAll=true;
+    const cr=readCatsRow(rows);
+    if(cr){if(cr.at>=(+S.settings.catsAt||0)){S.settings.cats=cr.cats;S.settings.catsAt=cr.at}else writeAll=true}else if(+S.settings.catsAt)writeAll=true;
     const dbr=readDebtsRow(rows);
     if(dbr){if(dbr.at>=(+S.settings.debtsAt||0)){S.settings.debts=dbr.list;S.settings.debtsAt=dbr.at}else writeAll=true}else writeAll=true;
     const sheetE=rows.map(fromRow).filter(Boolean),ids=new Set(sheetE.map(x=>x.id));
@@ -368,7 +382,7 @@ async function doSync(o){
     let merged=o.overwrite?S.entries.slice():sheetE.filter(x=>!p.del[x.id]).map(x=>p.edit[x.id]||x).concat(adds);
     merged.sort((a,b)=>a.ts-b.ts);
     if(sheetE.some(x=>p.del[x.id]||p.edit[x.id]))writeAll=true;
-    if(writeAll)await api({action:'replace',rows:[settingsRow(),subsRow(),debtsRow(),...merged.map(sheetRow)]});
+    if(writeAll)await api({action:'replace',rows:[settingsRow(),subsRow(),debtsRow(),...(+S.settings.catsAt?[catsRow()]:[]),...merged.map(sheetRow)]});
     else if(adds.length)await api({action:'append',rows:adds.map(sheetRow)});
     p.add={};p.del={};p.edit={};
     S.entries=merged;lastSync=new Date();saveLocal();
@@ -418,7 +432,7 @@ function renderLog(){
   $('#amt').textContent=amt.replace(/\B(?=(\d{3})+(?!\d))/g,',').replace(/(\.\d*),/g,'$1');
   document.querySelectorAll('#types button').forEach(b=>b.classList.toggle('on',b.dataset.t===type));
   if(type==='debt'&&!catsFor('debt').includes(cat))cat=catsFor('debt')[0];
-  $('#cats').innerHTML=catsFor(type).map(c=>`<button class="${c===cat?'on':''}">${esc(c)}</button>`).join('')+(type==='debt'?`<button data-newdebt="1" class="addsub">＋ Add debt</button>`:'');
+  $('#cats').innerHTML=catsFor(type).map(c=>`<button class="${c===cat?'on':''}">${esc(c)}</button>`).join('')+(type==='debt'?`<button data-newdebt="1" class="addsub">＋ Add debt</button>`:`<button data-newcat="1" class="addsub">＋ Add</button>`);
   {const sb=$('#subs');if(type==='spend'&&cat==='Bills'){sb.hidden=false;sb.innerHTML=`<button data-sub="" class="${!sub?'on':''}">General bill</button>`+subsList().map(x=>`<button data-sub="${esc(x.n)}" class="${sub===x.n?'on':''}">${esc(x.n)}${x.a?` <small>${fmt(x.a)}</small>`:''}</button>`).join('')+`<button data-newsub="1" class="addsub">＋ Other</button>`}else{sb.hidden=true;sub=null}}
   const go=$('#go');go.dataset.t=type;go.textContent=mode==='loading'?'Connecting…':'Log '+LBL[type];
   const now=new Date(),R=rows(),ms=new Date(now.getFullYear(),now.getMonth(),1),dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
@@ -430,7 +444,7 @@ function renderLog(){
   $('#today').textContent=mode==='loading'?' ':(syncNote&&!/^Synced|^Syncing/.test(syncNote)?syncNote+' · ':'')+line;
 }
 $('#types').onclick=e=>{const t=e.target.closest('button')?.dataset.t;if(!t)return;type=t;cat=catsFor(t)[0];sub=null;renderLog()};
-$('#cats').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.newdebt)return openNewSub('debt');cat=b.textContent;sub=null;renderLog()};
+$('#cats').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.newdebt)return openNewSub('debt');if(b.dataset.newcat)return openNewSub('cat');cat=b.textContent;sub=null;renderLog()};
 $('#subs').onclick=e=>{if(e.target.closest('[data-newsub]'))return openNewSub();const b=e.target.closest('[data-sub]');if(!b)return;sub=b.dataset.sub||null;const s=sub&&subsList().find(x=>x.n===sub);if(s&&s.a&&amt==='0')amt=String(s.a);renderLog()};
 $('#pad').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.textContent;
   if(k==='⌫')amt=amt.length>1?amt.slice(0,-1):'0';
@@ -630,6 +644,7 @@ $('#e-save').onclick=async()=>{
   S.entries=S.entries.map(e=>e.id===editId?x:e).sort((a,b)=>a.ts-b.ts);const p=pend();if(p.add[editId])p.add[editId]=x;else p.edit[editId]=x;
   if(esub&&!subsList().some(s=>s.n.toLowerCase()===esub.toLowerCase()))addSub(esub,0);
   if(editType==='debt'&&!debtsList().some(d=>d.n.toLowerCase()===cat.toLowerCase()))addDebt(cat,0);
+  if(editType!=='debt'&&!catsFor(editType).some(c=>c.toLowerCase()===cat.toLowerCase()))addCat(editType,cat);
   saveLocal();$('#esheet').classList.remove('open');render();toast('Entry updated');sync()};
 $('#e-del').onclick=async()=>{const b=$('#e-del');
   if(!unlocked()){$('#esheet').classList.remove('open');return openPw('unlock',()=>openEdit(editId))}
@@ -646,13 +661,24 @@ function addDebt(name,owed){const n=String(name||'').trim().replace(/\s*\/\s*/g,
   const list=debtsList().map(x=>({...x})),f=list.find(x=>x.n.toLowerCase()===n.toLowerCase());
   if(f){if(owed>0&&f.a!==owed)f.a=Math.round(owed*100)/100;else return f.n}else list.push({n,a:owed>0?Math.round(owed*100)/100:0});
   saveSettings({debts:list,debtsAt:Date.now()});sync();return f?f.n:n}
-function openNewSub(kind){newKind=kind==='debt'?'debt':'sub';const D=newKind==='debt';
-  $('#n-title').textContent=D?'Add a debt':'Add a subscription';$('#n-plabel').textContent=D?'Total amount you owe (optional)':'Monthly price (optional)';
-  $('#n-name').placeholder=D?'e.g. Car loan, Credit card, Owed to Ali':'e.g. Gym, Canva, ChatGPT';
-  $('#n-foot').textContent=D?"It's added to your debts on every device. Change the amount or remove it later in \u2699 Settings.":"It's added to your list on every device. Change or remove it later in \u2699 Settings.";
+const CAT_EG={spend:'e.g. Pets, Kids, Groceries, Coffee',save:'e.g. Wedding, New phone, Hajj',inc:'e.g. Bonus, Freelance, Rental'};
+/* Add your own category to a type and sync it; returns the name to select */
+function addCat(t,name){const n=String(name||'').trim().replace(/\s*\/\s*/g,' ').slice(0,30);if(!n||!CATS[t])return null;
+  const ex=catsFor(t).find(x=>x.toLowerCase()===n.toLowerCase());if(ex)return ex;
+  const c={spend:customCats('spend').slice(),save:customCats('save').slice(),inc:customCats('inc').slice()};c[t].push(n);
+  saveSettings({cats:c,catsAt:Date.now()});sync();return n}
+function removeCat(t,name){const c={spend:customCats('spend').slice(),save:customCats('save').slice(),inc:customCats('inc').slice()};c[t]=c[t].filter(x=>x!==name);
+  saveSettings({cats:c,catsAt:Date.now()});if(type===t&&cat===name)cat=catsFor(t)[0];renderCatsPanel();sync()}
+function openNewSub(kind){newKind=kind==='debt'||kind==='cat'?kind:'sub';const D=newKind==='debt',C=newKind==='cat';
+  $('#n-pwrap').hidden=C;
+  $('#n-title').textContent=C?`Add ${{spend:'a spending',save:'a saving',inc:'an income'}[type]} category`:D?'Add a debt':'Add a subscription';$('#n-plabel').textContent=D?'Total amount you owe (optional)':'Monthly price (optional)';
+  $('#n-name').placeholder=C?CAT_EG[type]:D?'e.g. Car loan, Credit card, Owed to Ali':'e.g. Gym, Canva, ChatGPT';
+  $('#n-foot').textContent=C?"It's added to your categories on every device. Remove it later in \u2699 Settings.":D?"It's added to your debts on every device. Change the amount or remove it later in \u2699 Settings.":"It's added to your list on every device. Change or remove it later in \u2699 Settings.";
   $('#n-name').value='';$('#n-price').value='';$('#n-err').textContent='';$('#nsheet').classList.add('open');setTimeout(()=>$('#n-name').focus(),50)}
 $('#n-form').onsubmit=e=>{e.preventDefault();const price=parseFloat($('#n-price').value.replace(',','.'))||0;
   if(price<0){$('#n-err').textContent='Price can\'t be negative.';return}
+  if(newKind==='cat'){const n=addCat(type,$('#n-name').value);if(!n){$('#n-err').textContent='Type a name for the category.';return}
+    $('#nsheet').classList.remove('open');cat=n;sub=null;renderLog();toast(`Added ${n} to your categories`);return}
   if(newKind==='debt'){const n=addDebt($('#n-name').value,price);if(!n){$('#n-err').textContent='Type a name for the debt.';return}
     $('#nsheet').classList.remove('open');type='debt';cat=n;renderLog();toast(`Added ${n} to your debts`);return}
   const n=addSub($('#n-name').value,price);if(!n){$('#n-err').textContent='Type a name for the subscription.';return}
@@ -660,6 +686,9 @@ $('#n-form').onsubmit=e=>{e.preventDefault();const price=parseFloat($('#n-price'
 $('#n-name').oninput=()=>{$('#n-err').textContent=''};
 $('#n-cancel').onclick=()=>$('#nsheet').classList.remove('open');
 $('#nsheet').onclick=e=>{if(e.target.id==='nsheet')$('#nsheet').classList.remove('open')};
+function renderCatsPanel(){const L={spend:'Spend',save:'Save',inc:'Income'};const any=['spend','save','inc'].some(t=>customCats(t).length);
+  $('#cats-ed').innerHTML=any?['spend','save','inc'].filter(t=>customCats(t).length).map(t=>`<div class="cated"><span>${L[t]}</span>${customCats(t).map(c=>`<button data-rmcat="${t}" data-c="${esc(c)}" aria-label="Remove ${esc(c)}">${esc(c)} ✕</button>`).join('')}</div>`).join(''):'<div class="d" style="margin-top:6px">None yet.</div>'}
+$('#cats-ed').onclick=e=>{const b=e.target.closest('[data-rmcat]');if(!b)return;removeCat(b.dataset.rmcat,b.dataset.c)};
 let debtsDraft=null;
 function renderDebtsPanel(){debtsDraft=debtsList().map(x=>({...x}));drawDebtsEd()}
 function drawDebtsEd(){$('#debts-ed').innerHTML=debtsDraft.map((x,i)=>`<div class="subrow"><input data-i="${i}" data-f="n" value="${esc(x.n)}" placeholder="Name" maxlength="30" aria-label="Debt name"><input data-i="${i}" data-f="a" value="${x.a||''}" placeholder="Owed" inputmode="decimal" aria-label="Total owed"><button data-rm="${i}" aria-label="Remove ${esc(x.n)}">✕</button></div>`).join('')||'<div class="d" style="margin-top:6px">No debts. Tap Add debt.</div>'}
@@ -690,7 +719,7 @@ function show(v){view=v;document.body.classList.toggle('logv',v==='log');$('#v-l
 function render(){renderLog();if(view==='report'&&mode!=='loading')renderReport()}
 $('#nav').onclick=e=>{const v=e.target.closest('button')?.dataset.v;if(v)show(v)};
 window.addEventListener('hashchange',()=>{const v=location.hash.slice(1);if(v==='log'||v==='report')show(v)});
-$('#gear').onclick=()=>{const t=S.settings;panelEdited=false;renderPwPanel();renderSubsPanel();renderDebtsPanel();$('#subs-msg').textContent='';$('#debts-msg').textContent='';$('#pw-msg').textContent='';$('#s-url').value=t.scriptUrl||'';$('#s-key').value=t.key||'';$('#s-msg').textContent='';$('#sheet').classList.add('open');refreshPanel();if(linked())sync()};
+$('#gear').onclick=()=>{const t=S.settings;panelEdited=false;renderPwPanel();renderSubsPanel();renderDebtsPanel();renderCatsPanel();$('#subs-msg').textContent='';$('#debts-msg').textContent='';$('#pw-msg').textContent='';$('#s-url').value=t.scriptUrl||'';$('#s-key').value=t.key||'';$('#s-msg').textContent='';$('#sheet').classList.add('open');refreshPanel();if(linked())sync()};
 ['#s-cur','#s-bud','#s-goal'].forEach(q=>$(q).addEventListener('input',()=>{panelEdited=true}));
 $('#s-close').onclick=()=>$('#sheet').classList.remove('open');
 $('#sheet').onclick=e=>{if(e.target.id==='sheet')$('#sheet').classList.remove('open')};
